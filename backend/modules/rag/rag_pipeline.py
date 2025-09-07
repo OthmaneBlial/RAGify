@@ -133,6 +133,7 @@ class RAGPipeline:
             query=query.text,
             db=db,
             knowledge_base_ids=query.knowledge_base_ids,
+            application_id=query.application_id,
             context_window=query.max_context_length // 4,  # Reserve space for prompt
             search_type=query.search_type,
         )

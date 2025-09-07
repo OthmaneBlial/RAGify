@@ -29,12 +29,30 @@
     <!-- Main Content -->
     <div class="max-w-4xl mx-auto px-4 py-8">
         <div class="bg-white rounded-lg shadow-lg p-6">
-            <h1 class="text-2xl font-bold text-gray-900 mb-6">Knowledge Base Management</h1>
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-gray-900 mb-2">AI Assistant Hub</h1>
+                <p class="text-gray-600">Create specialized AI assistants and manage your knowledge documents</p>
+            </div>
 
             <!-- Upload Section -->
             <div class="mb-8">
-                <h2 class="text-lg font-semibold mb-4">Upload Documents</h2>
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold">Upload Documents</h2>
+                        <p class="text-sm text-gray-600">Choose which AI assistant should have access to these documents</p>
+                    </div>
+                </div>
+
+                <!-- Upload Target Selection -->
+                <div class="mb-4 p-4 bg-gray-50 rounded-lg">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload to Assistant:</label>
+                    <select id="uploadTargetSelect" class="px-3 py-2 border border-gray-300 rounded-md bg-white">
+                        <option value="">Select an assistant...</option>
+                    </select>
+                    <p class="text-xs text-gray-600 mt-1">Documents will be available only to the selected assistant</p>
+                </div>
+
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition duration-200">
                     <div class="mb-4">
                         <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -52,7 +70,9 @@
                     >
                     <button
                         onclick="document.getElementById('fileInput').click()"
-                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                        id="uploadBtn"
+                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled
                     >
                         Choose Files
                     </button>
@@ -61,55 +81,46 @@
 
             <!-- Applications Section -->
             <div class="mb-8">
-                <h2 class="text-lg font-semibold mb-4">Applications</h2>
-
-                <!-- Current Application Selector -->
-                <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h3 class="font-semibold text-blue-900 mb-2">Current Application</h3>
-                    <select id="currentAppSelect" onchange="switchApplication()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option value="">Loading applications...</option>
-                    </select>
-                    <p class="text-sm text-blue-700 mt-2">
-                        Select an application to use for chat and document processing. The default application is always available.
-                    </p>
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold">AI Assistants</h2>
+                        <p class="text-sm text-gray-600">Create specialized AI assistants for different topics and purposes</p>
+                    </div>
+                    <button onclick="showCreateAppModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        <span>New Assistant</span>
+                    </button>
                 </div>
 
-                <div class="grid md:grid-cols-2 gap-4">
-                    <div class="border rounded-lg p-4">
-                        <h3 class="font-semibold mb-2">Create New Application</h3>
-                        <input
-                            type="text"
-                            id="appName"
-                            placeholder="Application name"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
-                        >
-                        <textarea
-                            id="appConfig"
-                            placeholder="Application configuration (JSON)"
-                            class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2 h-20"
-                        ></textarea>
-                        <button
-                            onclick="createApplication()"
-                            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200"
-                        >
-                            Create Application
-                        </button>
-                    </div>
-
-                    <div class="border rounded-lg p-4">
-                        <h3 class="font-semibold mb-2">Manage Applications</h3>
-                        <div id="applicationsList" class="space-y-2 max-h-60 overflow-y-auto">
-                            <p class="text-gray-500 text-sm">Loading applications...</p>
+                <!-- Current Application Selector -->
+                <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="font-semibold text-blue-900 mb-1">Active Assistant</h3>
+                            <select id="currentAppSelect" onchange="switchApplication()" class="px-3 py-2 border border-gray-300 rounded-md bg-white">
+                                <option value="">Loading assistants...</option>
+                            </select>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm text-blue-700">Using for chat</div>
+                            <div class="text-xs text-blue-600 mt-1">All uploaded documents are available</div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Applications Grid -->
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4" id="applicationsGrid">
+                    <p class="text-gray-500 text-sm col-span-full">Loading AI assistants...</p>
                 </div>
             </div>
 
             <!-- Documents Section -->
             <div>
                 <h2 class="text-lg font-semibold mb-4">Uploaded Documents</h2>
-                <div id="documentsList" class="space-y-2">
-                    <p class="text-gray-500 text-sm">No documents uploaded yet</p>
+                <div id="documentsContainer" class="space-y-6">
+                    <p class="text-gray-500 text-sm">Loading documents...</p>
                 </div>
             </div>
         </div>
@@ -120,44 +131,108 @@
 
         async function handleFileSelect(event) {
             const files = event.target.files;
+            const targetAppId = document.getElementById('uploadTargetSelect').value;
+
+            if (!targetAppId) {
+                showNotification('Please select an assistant to upload documents to', 'warning', 'No Target Selected');
+                return;
+            }
+
             for (let file of files) {
-                await uploadDocument(file);
+                await uploadDocument(file, targetAppId);
             }
         }
 
-        async function uploadDocument(file) {
+        async function uploadDocument(file, targetAppId) {
             const formData = new FormData();
             formData.append('file', file);
 
             try {
-                const response = await fetch(`${API_BASE}/api/v1/knowledge/upload/`, {
+                // Upload to the specific application's documents
+                const response = await fetch(`${API_BASE}/api/v1/applications/${targetAppId}/documents/`, {
                     method: 'POST',
                     body: formData
                 });
 
                 if (response.ok) {
                     const result = await response.json();
-                    alert(`Document "${file.name}" uploaded successfully!`);
+                    showNotification(`Document "${file.name}" uploaded to assistant!`, 'success', 'Upload Complete');
                     loadDocuments();
                 } else {
                     const errorText = await response.text();
                     console.error('Upload failed:', response.status, errorText);
-                    alert(`Failed to upload ${file.name}: ${response.status}`);
+                    showNotification(`Failed to upload ${file.name}: ${response.status}`, 'error', 'Upload Failed');
                 }
             } catch (error) {
                 console.error('Upload error:', error);
-                alert(`Error uploading ${file.name}: ${error.message}`);
+                showNotification(`Error uploading ${file.name}: ${error.message}`, 'error', 'Upload Error');
+            }
+        }
+
+        let selectedPersonality = 'professional';
+
+        function showCreateAppModal() {
+            const modal = document.getElementById('createAppModal');
+            const modalContent = document.getElementById('createAppModalContent');
+
+            // Reset form
+            document.getElementById('newAppName').value = '';
+            document.getElementById('newAppDescription').value = '';
+            selectedPersonality = 'professional';
+            updatePersonalitySelection();
+
+            // Show modal
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function hideCreateAppModal() {
+            const modal = document.getElementById('createAppModal');
+            const modalContent = document.getElementById('createAppModalContent');
+
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function selectPersonality(personality) {
+            selectedPersonality = personality;
+            updatePersonalitySelection();
+        }
+
+        function updatePersonalitySelection() {
+            const buttons = document.querySelectorAll('.personality-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('border-blue-500', 'bg-blue-50');
+                btn.classList.add('border-gray-200');
+            });
+
+            const selectedBtn = document.querySelector(`[onclick="selectPersonality('${selectedPersonality}')"]`);
+            if (selectedBtn) {
+                selectedBtn.classList.remove('border-gray-200');
+                selectedBtn.classList.add('border-blue-500', 'bg-blue-50');
             }
         }
 
         async function createApplication() {
-            const name = document.getElementById('appName').value;
-            const config = document.getElementById('appConfig').value;
+            const name = document.getElementById('newAppName').value.trim();
+            const description = document.getElementById('newAppDescription').value.trim();
 
             if (!name) {
-                alert('Please enter an application name');
+                showNotification('Please enter an assistant name', 'warning', 'Missing Information');
                 return;
             }
+
+            // Create configuration based on personality
+            const config = {
+                app_model_config: getPersonalityConfig(selectedPersonality),
+                knowledge_base_ids: [] // Will use all available documents
+            };
 
             try {
                 const response = await fetch(`${API_BASE}/api/v1/applications/`, {
@@ -167,24 +242,54 @@
                     },
                     body: JSON.stringify({
                         name: name,
-                        config: config ? JSON.parse(config) : {}
+                        description: description,
+                        config: config
                     })
                 });
 
                 if (response.ok) {
-                    alert('Application created successfully!');
-                    document.getElementById('appName').value = '';
-                    document.getElementById('appConfig').value = '';
+                    showNotification('AI Assistant created successfully!', 'success', 'Assistant Created');
+                    hideCreateAppModal();
                     loadApplications();
                 } else {
                     const errorText = await response.text();
                     console.error('Create app failed:', response.status, errorText);
-                    alert(`Failed to create application: ${response.status}`);
+                    showNotification(`Failed to create assistant: ${response.status}`, 'error', 'Creation Failed');
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert(`Error creating application: ${error.message}`);
+                showNotification(`Error creating assistant: ${error.message}`, 'error', 'Creation Error');
             }
+        }
+
+        function getPersonalityConfig(personality) {
+            const configs = {
+                professional: {
+                    temperature: 0.3,
+                    max_tokens: 1000,
+                    search_type: "hybrid",
+                    response_style: "formal"
+                },
+                casual: {
+                    temperature: 0.7,
+                    max_tokens: 800,
+                    search_type: "semantic",
+                    response_style: "conversational"
+                },
+                expert: {
+                    temperature: 0.1,
+                    max_tokens: 1500,
+                    search_type: "hybrid",
+                    response_style: "technical"
+                },
+                creative: {
+                    temperature: 0.9,
+                    max_tokens: 1200,
+                    search_type: "semantic",
+                    response_style: "innovative"
+                }
+            };
+            return configs[personality] || configs.professional;
         }
 
         async function loadApplications() {
@@ -195,10 +300,14 @@
 
                     // Update current application selector
                     const select = document.getElementById('currentAppSelect');
-                    select.innerHTML = '<option value="">Select an application...</option>';
+                    select.innerHTML = '<option value="">Select an assistant...</option>';
 
-                    // Update applications list with delete buttons
-                    const list = document.getElementById('applicationsList');
+                    // Update upload target selector
+                    const uploadSelect = document.getElementById('uploadTargetSelect');
+                    uploadSelect.innerHTML = '<option value="">Select an assistant...</option>';
+
+                    // Update applications grid
+                    const grid = document.getElementById('applicationsGrid');
 
                     if (applications && applications.length > 0) {
                         // Sort applications with default first
@@ -208,12 +317,19 @@
                             return 0;
                         });
 
-                        // Populate selector
+                        // Populate selectors
                         applications.forEach(app => {
-                            const option = document.createElement('option');
-                            option.value = app.id;
-                            option.textContent = app.name || 'Unnamed App';
-                            select.appendChild(option);
+                            // Current application selector
+                            const option1 = document.createElement('option');
+                            option1.value = app.id;
+                            option1.textContent = app.name || 'Unnamed Assistant';
+                            select.appendChild(option1);
+
+                            // Upload target selector
+                            const option2 = document.createElement('option');
+                            option2.value = app.id;
+                            option2.textContent = app.name || 'Unnamed Assistant';
+                            uploadSelect.appendChild(option2);
                         });
 
                         // Load current selection from localStorage
@@ -226,40 +342,85 @@
                             localStorage.setItem('currentApplicationId', applications[0].id);
                         }
 
-                        // Populate list with delete buttons
-                        list.innerHTML = applications.map(app => {
+                        // Populate grid with cards
+                        grid.innerHTML = applications.map(app => {
                             const isDefault = app.name === 'Default Chat Application';
-                            const deleteButton = isDefault ? '' :
-                                `<button onclick="deleteApplication('${app.id}')" class="text-red-600 hover:text-red-800 text-sm ml-2">
-                                    Delete
-                                </button>`;
+                            const personality = getPersonalityFromConfig(app.config);
+                            const personalityColor = getPersonalityColor(personality);
 
-                            return `<div class="border rounded p-3 flex justify-between items-center">
-                                <div>
-                                    <strong>${app.name || 'Unnamed App'}</strong>
-                                    <p class="text-sm text-gray-600">ID: ${app.id}</p>
-                                    ${isDefault ? '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Default</span>' : ''}
+                            return `
+                                <div class="bg-white border rounded-lg p-4 hover:shadow-md transition duration-200">
+                                    <div class="flex items-start justify-between mb-3">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="w-8 h-8 ${personalityColor} rounded-full flex items-center justify-center">
+                                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 class="font-semibold text-gray-900">${app.name || 'Unnamed Assistant'}</h3>
+                                                <p class="text-sm text-gray-600 capitalize">${personality} Assistant</p>
+                                            </div>
+                                        </div>
+                                        ${isDefault ? '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">Default</span>' : ''}
+                                    </div>
+
+                                    <p class="text-sm text-gray-600 mb-3">${app.description || 'No description provided'}</p>
+
+                                    <div class="flex items-center justify-between">
+                                        <div class="text-xs text-gray-500">
+                                            Created ${new Date(app.created_at).toLocaleDateString()}
+                                        </div>
+                                        ${!isDefault ? `
+                                            <button onclick="deleteApplication('${app.id}')" class="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 transition duration-200" title="Delete assistant">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        ` : ''}
+                                    </div>
                                 </div>
-                                ${deleteButton}
-                            </div>`;
+                            `;
                         }).join('');
                     } else {
-                        select.innerHTML = '<option value="">No applications available</option>';
-                        list.innerHTML = '<p class="text-gray-500 text-sm">No applications yet</p>';
+                        select.innerHTML = '<option value="">No assistants available</option>';
+                        uploadSelect.innerHTML = '<option value="">No assistants available</option>';
+                        grid.innerHTML = '<p class="text-gray-500 text-sm col-span-full">No AI assistants yet</p>';
                     }
                 } else {
                     console.error('Failed to load applications:', response.status);
-                    const list = document.getElementById('applicationsList');
+                    const grid = document.getElementById('applicationsGrid');
                     const select = document.getElementById('currentAppSelect');
+                    const uploadSelect = document.getElementById('uploadTargetSelect');
                     select.innerHTML = '<option value="">Failed to load</option>';
-                    list.innerHTML = '<p class="text-red-500 text-sm">Failed to load applications</p>';
+                    uploadSelect.innerHTML = '<option value="">Failed to load</option>';
+                    grid.innerHTML = '<p class="text-red-500 text-sm col-span-full">Failed to load AI assistants</p>';
                 }
             } catch (error) {
                 console.error('Error loading applications:', error);
-                const list = document.getElementById('applicationsList');
+                const grid = document.getElementById('applicationsGrid');
                 const select = document.getElementById('currentAppSelect');
                 select.innerHTML = '<option value="">Error loading</option>';
-                list.innerHTML = '<p class="text-red-500 text-sm">Error loading applications</p>';
+                grid.innerHTML = '<p class="text-red-500 text-sm col-span-full">Error loading AI assistants</p>';
+            }
+        }
+
+        function getPersonalityFromConfig(config) {
+            if (!config || !config.app_model_config) return 'professional';
+
+            const modelConfig = config.app_model_config;
+            if (modelConfig.temperature && modelConfig.temperature > 0.7) return 'creative';
+            if (modelConfig.temperature && modelConfig.temperature < 0.3) return 'expert';
+            return 'professional';
+        }
+
+        function getPersonalityColor(personality) {
+            switch (personality) {
+                case 'professional': return 'bg-blue-500';
+                case 'casual': return 'bg-green-500';
+                case 'expert': return 'bg-purple-500';
+                case 'creative': return 'bg-orange-500';
+                default: return 'bg-gray-500';
             }
         }
 
@@ -277,54 +438,144 @@
         }
 
         async function deleteApplication(appId) {
-            if (!confirm('Are you sure you want to delete this application? This action cannot be undone.')) {
-                return;
-            }
+            showConfirmationModal(
+                'Are you sure you want to delete this application? This action cannot be undone.',
+                'Delete Application',
+                async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/applications/${appId}`, {
+                            method: 'DELETE'
+                        });
 
-            try {
-                const response = await fetch(`${API_BASE}/api/v1/applications/${appId}`, {
-                    method: 'DELETE'
-                });
-
-                if (response.ok) {
-                    alert('Application deleted successfully!');
-                    loadApplications();
-                } else {
-                    const error = await response.json();
-                    const errorMessage = error.detail || 'Unknown error';
-                    alert(`Failed to delete application:\n\n${errorMessage}`);
+                        if (response.ok) {
+                            showNotification('Application deleted successfully!', 'success', 'Application Deleted');
+                            loadApplications();
+                        } else {
+                            const error = await response.json();
+                            const errorMessage = error.detail || 'Unknown error';
+                            showNotification(`Failed to delete application: ${errorMessage}`, 'error', 'Deletion Failed');
+                        }
+                    } catch (error) {
+                        console.error('Error deleting application:', error);
+                        showNotification(`Error deleting application: ${error.message}`, 'error', 'Deletion Error');
+                    }
                 }
-            } catch (error) {
-                console.error('Error deleting application:', error);
-                alert(`Error deleting application: ${error.message}`);
-            }
+            );
+        }
+
+        async function deleteDocument(appId, docId) {
+            showConfirmationModal(
+                'Are you sure you want to delete this document? This action cannot be undone.',
+                'Delete Document',
+                async () => {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/v1/applications/${appId}/documents/${docId}`, {
+                            method: 'DELETE'
+                        });
+
+                        if (response.ok) {
+                            showNotification('Document deleted successfully!', 'success', 'Document Deleted');
+                            loadDocuments();
+                        } else {
+                            const errorText = await response.text();
+                            let errorMessage = 'Unknown error';
+                            try {
+                                const error = JSON.parse(errorText);
+                                errorMessage = error.detail || error.message || errorText;
+                            } catch {
+                                errorMessage = errorText || 'Unknown error';
+                            }
+                            showNotification(`Failed to delete document: ${errorMessage}`, 'error', 'Deletion Failed');
+                        }
+                    } catch (error) {
+                        console.error('Error deleting document:', error);
+                        showNotification(`Error deleting document: ${error.message}`, 'error', 'Deletion Error');
+                    }
+                }
+            );
         }
 
         async function loadDocuments() {
             try {
-                const response = await fetch(`${API_BASE}/api/v1/knowledge/`);
-                if (response.ok) {
-                    const documents = await response.json();
-                    const list = document.getElementById('documentsList');
-                    if (documents && documents.length > 0) {
-                        list.innerHTML = documents.map(doc =>
-                            `<div class="border rounded p-3">
-                                <strong>${doc.filename || 'Unknown file'}</strong>
-                                <p class="text-sm text-gray-600">Size: ${formatFileSize(doc.size || 0)} | Uploaded: ${doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : 'Unknown'}</p>
-                            </div>`
-                        ).join('');
-                    } else {
-                        list.innerHTML = '<p class="text-gray-500 text-sm">No documents uploaded yet</p>';
+                // First, get all applications
+                const appsResponse = await fetch(`${API_BASE}/api/v1/applications/`);
+                if (!appsResponse.ok) {
+                    throw new Error('Failed to load applications');
+                }
+                const applications = await appsResponse.json();
+
+                const container = document.getElementById('documentsContainer');
+                let html = '';
+
+                if (applications && applications.length > 0) {
+                    for (const app of applications) {
+                        try {
+                            // Fetch documents for this application
+                            const docsResponse = await fetch(`${API_BASE}/api/v1/applications/${app.id}/documents/`);
+                            let documents = [];
+                            if (docsResponse.ok) {
+                                documents = await docsResponse.json();
+                            } else {
+                                console.warn(`Failed to load documents for ${app.name}:`, docsResponse.status);
+                            }
+
+                            // Create section for this assistant
+                            html += `
+                                <div class="bg-white border rounded-lg p-4">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h3 class="text-md font-semibold text-gray-900">${app.name || 'Unnamed Assistant'}</h3>
+                                        <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">${documents.length} document${documents.length !== 1 ? 's' : ''}</span>
+                                    </div>
+                                    <div class="space-y-2">
+                            `;
+
+                            if (documents && documents.length > 0) {
+                                documents.forEach(doc => {
+                                    html += `
+                                        <div class="border rounded p-3 flex justify-between items-center bg-gray-50">
+                                            <div class="flex-1">
+                                                <strong class="text-gray-900">${doc.filename || 'Unknown file'}</strong>
+                                                <p class="text-sm text-gray-600">
+                                                    Size: ${formatFileSize(doc.size || 0)} |
+                                                    Uploaded: ${doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : 'Unknown'} |
+                                                    Assistant: ${app.name || 'Unnamed Assistant'}
+                                                </p>
+                                            </div>
+                                            <button onclick="deleteDocument('${app.id}', '${doc.id || doc.filename}')" class="text-red-600 hover:text-red-800 p-2 rounded-md hover:bg-red-50 transition duration-200" title="Delete document">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    `;
+                                });
+                            } else {
+                                html += '<p class="text-gray-500 text-sm">No documents uploaded to this assistant yet</p>';
+                            }
+
+                            html += `
+                                    </div>
+                                </div>
+                            `;
+                        } catch (error) {
+                            console.error(`Error loading documents for ${app.name}:`, error);
+                            html += `
+                                <div class="bg-white border rounded-lg p-4">
+                                    <h3 class="text-md font-semibold text-gray-900">${app.name || 'Unnamed Assistant'}</h3>
+                                    <p class="text-red-500 text-sm">Error loading documents</p>
+                                </div>
+                            `;
+                        }
                     }
                 } else {
-                    console.error('Failed to load documents:', response.status);
-                    const list = document.getElementById('documentsList');
-                    list.innerHTML = '<p class="text-red-500 text-sm">Failed to load documents</p>';
+                    html = '<p class="text-gray-500 text-sm">No assistants available</p>';
                 }
+
+                container.innerHTML = html;
             } catch (error) {
                 console.error('Error loading documents:', error);
-                const list = document.getElementById('documentsList');
-                list.innerHTML = '<p class="text-red-500 text-sm">Error loading documents</p>';
+                const container = document.getElementById('documentsContainer');
+                container.innerHTML = '<p class="text-red-500 text-sm">Error loading documents</p>';
             }
         }
 
@@ -336,11 +587,280 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
+        // Update upload button state based on target selection
+        function updateUploadButtonState() {
+            const targetAppId = document.getElementById('uploadTargetSelect').value;
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = !targetAppId;
+        }
+
         // Load data on page load
         window.onload = function() {
             loadApplications();
             loadDocuments();
+
+            // Add event listener for upload target selector
+            document.getElementById('uploadTargetSelect').addEventListener('change', updateUploadButtonState);
         };
+
+        // Modal functionality
+        function showConfirmationModal(message, title = 'Confirm Action', confirmCallback, cancelCallback = null) {
+            const modal = document.getElementById('confirmationModal');
+            const modalContent = document.getElementById('modalContent');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const confirmBtn = document.getElementById('modalConfirmBtn');
+            const cancelBtn = document.getElementById('modalCancelBtn');
+
+            // Set content
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+
+            // Show modal with animation
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            // Handle confirm button
+            const handleConfirm = () => {
+                hideModal();
+                if (confirmCallback) confirmCallback();
+            };
+
+            // Handle cancel button
+            const handleCancel = () => {
+                hideModal();
+                if (cancelCallback) cancelCallback();
+            };
+
+            // Handle escape key
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    handleCancel();
+                }
+            };
+
+            // Handle enter key
+            const handleEnter = (e) => {
+                if (e.key === 'Enter') {
+                    handleConfirm();
+                }
+            };
+
+            // Add event listeners
+            confirmBtn.onclick = handleConfirm;
+            cancelBtn.onclick = handleCancel;
+            document.addEventListener('keydown', handleEscape);
+            document.addEventListener('keydown', handleEnter);
+
+            // Focus cancel button for accessibility
+            setTimeout(() => cancelBtn.focus(), 100);
+
+            function hideModal() {
+                modalContent.classList.remove('scale-100', 'opacity-100');
+                modalContent.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+
+                // Remove event listeners
+                confirmBtn.onclick = null;
+                cancelBtn.onclick = null;
+                document.removeEventListener('keydown', handleEscape);
+                document.removeEventListener('keydown', handleEnter);
+            }
+        }
+
+        // Notification functionality
+        function showNotification(message, type = 'info', title = 'Notification') {
+            const notification = document.getElementById('notificationModal');
+            const notificationContent = document.getElementById('notificationContent');
+            const notificationBorder = document.getElementById('notificationBorder');
+            const notificationIcon = document.getElementById('notificationIcon');
+            const notificationTitle = document.getElementById('notificationTitle');
+            const notificationMessage = document.getElementById('notificationMessage');
+            const closeBtn = document.getElementById('notificationCloseBtn');
+
+            // Set content
+            notificationTitle.textContent = title;
+            notificationMessage.textContent = message;
+
+            // Set styling based on type
+            let iconHtml = '';
+            let borderColor = '';
+            let titleColor = '';
+
+            switch (type) {
+                case 'success':
+                    borderColor = 'border-green-500';
+                    titleColor = 'text-green-900';
+                    iconHtml = '<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    break;
+                case 'error':
+                    borderColor = 'border-red-500';
+                    titleColor = 'text-red-900';
+                    iconHtml = '<svg class="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    break;
+                case 'warning':
+                    borderColor = 'border-yellow-500';
+                    titleColor = 'text-yellow-900';
+                    iconHtml = '<svg class="h-5 w-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg>';
+                    break;
+                default: // info
+                    borderColor = 'border-blue-500';
+                    titleColor = 'text-blue-900';
+                    iconHtml = '<svg class="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            }
+
+            notificationBorder.className = `bg-white rounded-lg shadow-lg border-l-4 p-4 max-w-sm ${borderColor}`;
+            notificationTitle.className = `text-sm font-medium ${titleColor}`;
+            notificationIcon.innerHTML = iconHtml;
+
+            // Show notification with animation
+            notification.classList.remove('translate-x-full', 'opacity-0');
+            notification.classList.add('translate-x-0', 'opacity-100');
+
+            // Auto-hide after 5 seconds
+            const autoHideTimeout = setTimeout(() => {
+                hideNotification();
+            }, 5000);
+
+            // Handle close button
+            const handleClose = () => {
+                clearTimeout(autoHideTimeout);
+                hideNotification();
+            };
+
+            closeBtn.onclick = handleClose;
+
+            function hideNotification() {
+                notification.classList.remove('translate-x-0', 'opacity-100');
+                notification.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => {
+                    closeBtn.onclick = null;
+                }, 300);
+            }
+        }
     </script>
+
+    <!-- Create Application Modal -->
+    <div id="createAppModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-lg w-full transform transition-all duration-300 scale-95 opacity-0" id="createAppModalContent">
+                <div class="p-6">
+                    <div class="flex items-center mb-6">
+                        <div class="flex-shrink-0">
+                            <svg class="h-8 w-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="ml-3 text-xl font-semibold text-gray-900">Create New AI Assistant</h3>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Assistant Name</label>
+                            <input
+                                type="text"
+                                id="newAppName"
+                                placeholder="e.g., Medical Assistant, Code Reviewer, Research Helper"
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Purpose & Description</label>
+                            <textarea
+                                id="newAppDescription"
+                                placeholder="Describe what this assistant will help you with..."
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 h-20"
+                            ></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Assistant Personality</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button onclick="selectPersonality('professional')" class="personality-btn p-3 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition duration-200 text-left">
+                                    <div class="font-medium text-gray-900">Professional</div>
+                                    <div class="text-sm text-gray-600">Formal, detailed responses</div>
+                                </button>
+                                <button onclick="selectPersonality('casual')" class="personality-btn p-3 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition duration-200 text-left">
+                                    <div class="font-medium text-gray-900">Casual</div>
+                                    <div class="text-sm text-gray-600">Friendly, conversational</div>
+                                </button>
+                                <button onclick="selectPersonality('expert')" class="personality-btn p-3 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition duration-200 text-left">
+                                    <div class="font-medium text-gray-900">Expert</div>
+                                    <div class="text-sm text-gray-600">Technical, in-depth analysis</div>
+                                </button>
+                                <button onclick="selectPersonality('creative')" class="personality-btn p-3 border-2 border-gray-200 rounded-lg hover:border-blue-300 transition duration-200 text-left">
+                                    <div class="font-medium text-gray-900">Creative</div>
+                                    <div class="text-sm text-gray-600">Imaginative, innovative ideas</div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-6 py-4 flex justify-end space-x-3 rounded-b-lg">
+                    <button onclick="hideCreateAppModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition duration-200">
+                        Cancel
+                    </button>
+                    <button onclick="createApplication()" class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 transition duration-200">
+                        Create Assistant
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full transform transition-all duration-300 scale-95 opacity-0" id="modalContent">
+                <div class="p-6">
+                    <div class="flex items-center mb-4">
+                        <div class="flex-shrink-0">
+                            <svg class="h-6 w-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="ml-3 text-lg font-medium text-gray-900" id="modalTitle">Confirm Action</h3>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-sm text-gray-600" id="modalMessage">Are you sure you want to proceed?</p>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-6 py-4 flex justify-end space-x-3 rounded-b-lg">
+                    <button id="modalCancelBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-200">
+                        Cancel
+                    </button>
+                    <button id="modalConfirmBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-200">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="fixed top-4 right-4 z-50 transform transition-all duration-300 translate-x-full opacity-0" id="notificationContent">
+        <div class="bg-white rounded-lg shadow-lg border-l-4 p-4 max-w-sm" id="notificationBorder">
+            <div class="flex items-start">
+                <div class="flex-shrink-0" id="notificationIcon">
+                    <!-- Icon will be set by JavaScript -->
+                </div>
+                <div class="ml-3 flex-1">
+                    <h3 class="text-sm font-medium text-gray-900" id="notificationTitle">Notification</h3>
+                    <p class="text-sm text-gray-600 mt-1" id="notificationMessage">Message here</p>
+                </div>
+                <button id="notificationCloseBtn" class="ml-4 text-gray-400 hover:text-gray-600 focus:outline-none">
+                    <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

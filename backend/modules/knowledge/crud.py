@@ -53,12 +53,13 @@ async def list_knowledge_bases(db: AsyncSession) -> List[KnowledgeBase]:
 
 # Document CRUD
 async def create_document(
-    db: AsyncSession, title: str, content: str, knowledge_base_id: UUID
+    db: AsyncSession, title: str, content: str, knowledge_base_id: UUID, application_id: Optional[UUID] = None
 ) -> Document:
     doc = Document(
         title=title,
         content=content,
         knowledge_base_id=knowledge_base_id,
+        application_id=application_id,
         processing_status="processing",
     )
     db.add(doc)
@@ -119,6 +120,15 @@ async def list_documents_by_knowledge_base(
     return result.scalars().all()
 
 
+async def list_documents_by_application(
+    db: AsyncSession, application_id: UUID
+) -> List[Document]:
+    result = await db.execute(
+        select(Document).where(Document.application_id == application_id)
+    )
+    return result.scalars().all()
+
+
 # Paragraph CRUD
 async def create_paragraph(
     db: AsyncSession, content: str, document_id: UUID
@@ -160,6 +170,7 @@ async def search_embeddings_by_similarity(
     query_vector: List[float],
     limit: int = 10,
     knowledge_base_id: Optional[UUID] = None,
+    application_id: Optional[UUID] = None,
     threshold: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -197,14 +208,21 @@ async def search_embeddings_by_similarity(
     vector_str = "[" + ",".join(str(x) for x in query_vector) + "]"
     params = {"query_vector": vector_str}
 
-    # Add knowledge base filter if specified
+    # Add filters if specified
+    where_conditions = []
     if knowledge_base_id:
-        query += " WHERE d.knowledge_base_id = :kb_id"
+        where_conditions.append("d.knowledge_base_id = :kb_id")
         params["kb_id"] = knowledge_base_id
+    if application_id:
+        where_conditions.append("d.application_id = :app_id")
+        params["app_id"] = application_id
+
+    if where_conditions:
+        query += " WHERE " + " AND ".join(where_conditions)
 
     # Add similarity threshold if specified
     if threshold is not None:
-        where_clause = " WHERE " if not knowledge_base_id else " AND "
+        where_clause = " WHERE " if not where_conditions else " AND "
         query += f"{where_clause} (1 - (e.vector <=> :query_vector)) >= :threshold"
         params["threshold"] = threshold
 
@@ -235,6 +253,7 @@ async def search_paragraphs_by_text(
     query_text: str,
     limit: int = 10,
     knowledge_base_id: Optional[UUID] = None,
+    application_id: Optional[UUID] = None,
 ) -> List[Dict[str, Any]]:
     """
     Search paragraphs by semantic similarity to query text.
@@ -255,7 +274,7 @@ async def search_paragraphs_by_text(
 
     # Search for similar embeddings
     return await search_embeddings_by_similarity(
-        db, query_vector, limit, knowledge_base_id
+        db, query_vector, limit, knowledge_base_id, application_id
     )
 
 
@@ -314,7 +333,7 @@ async def delete_embeddings_by_document(db: AsyncSession, document_id: UUID) -> 
 
 
 async def get_embeddings_stats(
-    db: AsyncSession, knowledge_base_id: Optional[UUID] = None
+    db: AsyncSession, knowledge_base_id: Optional[UUID] = None, application_id: Optional[UUID] = None
 ) -> Dict[str, Any]:
     """
     Get statistics about embeddings in the database.
@@ -331,12 +350,14 @@ async def get_embeddings_stats(
     # Count total embeddings
     query = select(func.count(Embedding.id))
 
+    where_conditions = []
     if knowledge_base_id:
-        query = (
-            query.join(Paragraph)
-            .join(Document)
-            .where(Document.knowledge_base_id == knowledge_base_id)
-        )
+        where_conditions.append(Document.knowledge_base_id == knowledge_base_id)
+    if application_id:
+        where_conditions.append(Document.application_id == application_id)
+
+    if where_conditions:
+        query = query.join(Paragraph).join(Document).where(*where_conditions)
 
     result = await db.execute(query)
     total_embeddings = result.scalar()
@@ -344,12 +365,8 @@ async def get_embeddings_stats(
     # Count paragraphs with embeddings
     query = select(func.count(func.distinct(Embedding.paragraph_id)))
 
-    if knowledge_base_id:
-        query = (
-            query.join(Paragraph)
-            .join(Document)
-            .where(Document.knowledge_base_id == knowledge_base_id)
-        )
+    if where_conditions:
+        query = query.join(Paragraph).join(Document).where(*where_conditions)
 
     result = await db.execute(query)
     paragraphs_with_embeddings = result.scalar()
@@ -358,4 +375,5 @@ async def get_embeddings_stats(
         "total_embeddings": total_embeddings,
         "paragraphs_with_embeddings": paragraphs_with_embeddings,
         "knowledge_base_id": str(knowledge_base_id) if knowledge_base_id else None,
+        "application_id": str(application_id) if application_id else None,
     }

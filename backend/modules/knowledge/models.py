@@ -35,6 +35,7 @@ class Document(Base):
     title = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     knowledge_base_id = Column(UUID(as_uuid=True), ForeignKey("knowledge_bases.id"))
+    application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id"))
     processing_status = Column(String, nullable=True, default="pending")
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
@@ -46,6 +47,7 @@ class Document(Base):
     )
 
     knowledge_base = relationship("KnowledgeBase", back_populates="documents")
+    application = relationship("Application", back_populates="documents")
     paragraphs = relationship("Paragraph", back_populates="document")
 
 
