@@ -1,0 +1,7 @@
+__pycache__
+.pytest_cache
+.benchmarks
+venv
+ragify.egg-info
+.ruff_cache
+.env

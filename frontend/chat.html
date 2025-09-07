@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat - RAGify</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-2xl font-bold text-gray-900">RAGify</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Home</a>
+                    <a href="/chat.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Chat</a>
+                    <a href="/knowledge.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Knowledge Base</a>
+                    <a href="/settings.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Chat Interface -->
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg h-[600px] flex flex-col">
+            <!-- Chat Header -->
+            <div class="bg-blue-600 text-white p-4 rounded-t-lg">
+                <h1 class="text-xl font-semibold">Chat with Your Documents</h1>
+                <p class="text-blue-100 text-sm" id="chatSubtitle">Ask questions about your uploaded documents</p>
+            </div>
+
+            <!-- Messages Container -->
+            <div id="messages" class="flex-1 p-4 overflow-y-auto space-y-4">
+                <div class="chat-bubble assistant">
+                    <p id="welcomeMessage">Hello! I'm your AI assistant. Upload some documents first, then ask me questions about them!</p>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="border-t p-4">
+                <div class="flex space-x-2">
+                    <input
+                        type="text"
+                        id="messageInput"
+                        placeholder="Ask a question about your documents..."
+                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        onkeypress="handleKeyPress(event)"
+                    >
+                    <button
+                        onclick="sendMessage()"
+                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                    >
+                        Send
+                    </button>
+                </div>
+                <div class="mt-2 text-sm text-gray-500">
+                    <span id="status">Ready to chat</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentApplicationId = null;
+        let selectedModel = null;
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // Add user message to chat
+            addMessage(message, 'user');
+            input.value = '';
+
+            // Show typing indicator
+            showStatus('AI is thinking...');
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/chat/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        application_id: currentApplicationId,
+                        model_name: selectedModel,
+                        provider: selectedModel ? 'openrouter' : null
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addMessage(data.response || data.message || 'Response received', 'assistant');
+                    showStatus('Ready to chat');
+                } else {
+                    const errorText = await response.text();
+                    console.error('API Error:', response.status, errorText);
+                    addMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+                    showStatus('Error occurred');
+                }
+            } catch (error) {
+                console.error('Network Error:', error);
+                addMessage('Network error. Please check your connection.', 'assistant');
+                showStatus('Connection error');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-bubble ${sender}`;
+            messageDiv.innerHTML = `<p>${text}</p>`;
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function showStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Update UI based on selected model
+        function updateModelDisplay() {
+            const subtitleElement = document.getElementById('chatSubtitle');
+            const welcomeElement = document.getElementById('welcomeMessage');
+
+            if (selectedModel) {
+                // Update subtitle to show current model
+                subtitleElement.textContent = `Ask questions about your uploaded documents (using ${selectedModel})`;
+
+                // Update welcome message to mention the current model
+                const modelDisplayName = getModelDisplayName(selectedModel);
+                welcomeElement.textContent = `Hello! I'm your AI assistant powered by ${modelDisplayName}. Upload some documents first, then ask me questions about them!`;
+            } else {
+                subtitleElement.textContent = 'Ask questions about your uploaded documents';
+                welcomeElement.textContent = 'Hello! I\'m your AI assistant. Upload some documents first, then ask me questions about them!';
+            }
+        }
+
+        // Get user-friendly display name for model
+        function getModelDisplayName(modelName) {
+            const displayNames = {
+                'openai/gpt-5-nano': 'OpenAI GPT-5 Nano',
+                'openai/gpt-oss-20b': 'OpenAI GPT OSS 20B',
+                'z-ai/glm-4-32b': 'Z-AI GLM-4 32B',
+                'google/gemini-2.5-flash-lite': 'Google Gemini 2.5 Flash Lite'
+            };
+            return displayNames[modelName] || modelName;
+        }
+
+        // Load available applications and selected model on page load
+        window.onload = async function() {
+            // Load selected model from localStorage
+            selectedModel = localStorage.getItem('selectedModel');
+
+            // Load selected application from localStorage
+            currentApplicationId = localStorage.getItem('currentApplicationId');
+
+            // Update UI with selected model
+            updateModelDisplay();
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/applications/`);
+                if (response.ok) {
+                    const applications = await response.json();
+                    if (applications && applications.length > 0) {
+                        // Use stored application ID or default to first one
+                        if (!currentApplicationId) {
+                            currentApplicationId = applications[0].id;
+                            localStorage.setItem('currentApplicationId', currentApplicationId);
+                        }
+
+                        // Find the current application
+                        const currentApp = applications.find(app => app.id === currentApplicationId) || applications[0];
+                        const modelInfo = selectedModel ? ` (${selectedModel})` : '';
+                        showStatus(`Connected to: ${currentApp.name || 'Application'}${modelInfo}`);
+                    } else {
+                        showStatus('No applications found - create one first');
+                    }
+                } else {
+                    console.log('Could not load applications:', response.status);
+                    showStatus('Ready to chat');
+                }
+            } catch (error) {
+                console.log('Could not load applications:', error);
+                showStatus('Ready to chat');
+            }
+        };
+    </script>
+</body>
+</html>

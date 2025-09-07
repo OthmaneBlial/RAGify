@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ragify"
+version = "0.1.0"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "asyncpg",
+    "sentence-transformers",
+    "faiss-cpu",
+    "streamlit",
+    "pydantic",
+    "pydantic-settings",
+    "python-multipart",
+    "aiofiles",
+    "pypdf",
+    "python-docx",
+    "aiohttp",
+    "tenacity",
+    "slowapi",
+    "psutil"
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*", "frontend*", "shared*"]

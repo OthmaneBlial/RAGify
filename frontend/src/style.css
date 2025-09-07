@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for RAGify */
+.ragify-gradient {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.chat-bubble {
+  @apply rounded-lg px-4 py-2 max-w-xs lg:max-w-md;
+}
+
+.chat-bubble.user {
+  @apply bg-blue-500 text-white self-end;
+}
+
+.chat-bubble.assistant {
+  @apply bg-gray-200 text-gray-800 self-start;
+}

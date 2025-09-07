@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - RAGify</title>
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-2xl font-bold text-gray-900">RAGify</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Home</a>
+                    <a href="/chat.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Chat</a>
+                    <a href="/knowledge.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Knowledge Base</a>
+                    <a href="/settings.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Settings Content -->
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+
+            <!-- Model Selection Section -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">AI Model Configuration</h2>
+                <p class="text-gray-600 mb-4">Choose which AI model to use for generating responses. Different models offer different capabilities and performance characteristics.</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Model</label>
+                        <select id="modelSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Loading models...</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-blue-50 p-4 rounded-md">
+                        <h3 class="font-medium text-blue-900 mb-2">Model Information</h3>
+                        <div id="modelInfo" class="text-sm text-blue-800">
+                            <p>Select a model to see its details.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-4">
+                        <div>
+                            <h3 class="font-medium text-gray-900">Current Selection</h3>
+                            <p id="currentModel" class="text-sm text-gray-600">No model selected</p>
+                        </div>
+                        <button id="saveButton" onclick="saveSettings()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Save Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Configuration Section -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">API Configuration</h2>
+                <div id="apiStatus" class="p-4 rounded-md">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg id="statusIcon" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <!-- Icon will be updated by JavaScript -->
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 id="statusTitle" class="text-sm font-medium">Checking API Status...</h3>
+                            <p id="statusMessage" class="text-sm mt-1">
+                                Verifying OpenRouter API key configuration.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            <div id="statusMessage" class="hidden p-4 rounded-md mb-4">
+                <p id="statusText" class="text-sm"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let availableModels = [];
+        let currentSelectedModel = null;
+
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/models/`);
+                if (response.ok) {
+                    const models = await response.json();
+                    availableModels = models;
+                    populateModelSelect(models);
+                    updateApiStatus(true, 'API key is configured and working correctly.');
+                } else {
+                    updateApiStatus(false, 'Failed to connect to API. Please check your OpenRouter API key configuration.');
+                    showStatus('Failed to load models', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading models:', error);
+                updateApiStatus(false, 'Network error. Please check your connection and API key.');
+                showStatus('Network error while loading models', 'error');
+            }
+        }
+
+        function updateApiStatus(success, message) {
+            const statusDiv = document.getElementById('apiStatus');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusTitle = document.getElementById('statusTitle');
+            const statusMessage = document.getElementById('statusMessage');
+
+            if (success) {
+                // Green success styling
+                statusDiv.className = 'bg-green-50 border border-green-200 p-4 rounded-md';
+                statusIcon.className = 'h-5 w-5 text-green-400';
+                statusIcon.innerHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />';
+                statusTitle.className = 'text-sm font-medium text-green-800';
+                statusTitle.textContent = 'API Key Configured Successfully';
+                statusMessage.className = 'text-sm text-green-700 mt-1';
+            } else {
+                // Red error styling
+                statusDiv.className = 'bg-red-50 border border-red-200 p-4 rounded-md';
+                statusIcon.className = 'h-5 w-5 text-red-400';
+                statusIcon.innerHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />';
+                statusTitle.className = 'text-sm font-medium text-red-800';
+                statusTitle.textContent = 'API Configuration Error';
+                statusMessage.className = 'text-sm text-red-700 mt-1';
+            }
+
+            statusMessage.textContent = message;
+        }
+
+        function populateModelSelect(models) {
+            const select = document.getElementById('modelSelect');
+            select.innerHTML = '<option value="">Select a model...</option>';
+
+            // Filter for OpenRouter models
+            const openRouterModels = models.filter(model => model.provider === 'openrouter');
+
+            openRouterModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.name;
+                option.textContent = `${model.name} - ${model.description || 'No description'}`;
+                select.appendChild(option);
+            });
+
+            // Load current selection
+            loadCurrentSettings();
+        }
+
+        async function loadCurrentSettings() {
+            try {
+                // For now, we'll use localStorage to persist the selection
+                // In a real app, this would come from the backend
+                const savedModel = localStorage.getItem('selectedModel');
+                if (savedModel) {
+                    document.getElementById('modelSelect').value = savedModel;
+                    updateModelInfo(savedModel);
+                    document.getElementById('currentModel').textContent = savedModel;
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+
+        function updateModelInfo(modelName) {
+            const model = availableModels.find(m => m.name === modelName);
+            const infoDiv = document.getElementById('modelInfo');
+
+            if (model) {
+                infoDiv.innerHTML = `
+                    <p><strong>Provider:</strong> ${model.provider}</p>
+                    <p><strong>Context Window:</strong> ${model.context_window} tokens</p>
+                    <p><strong>Streaming:</strong> ${model.supports_streaming ? 'Yes' : 'No'}</p>
+                    <p><strong>Description:</strong> ${model.description || 'No description available'}</p>
+                `;
+            } else {
+                infoDiv.innerHTML = '<p>Select a model to see its details.</p>';
+            }
+        }
+
+        function saveSettings() {
+            const select = document.getElementById('modelSelect');
+            const selectedModel = select.value;
+
+            if (!selectedModel) {
+                showStatus('Please select a model', 'error');
+                return;
+            }
+
+            try {
+                // Save to localStorage for now
+                localStorage.setItem('selectedModel', selectedModel);
+                document.getElementById('currentModel').textContent = selectedModel;
+                showStatus('Settings saved successfully!', 'success');
+            } catch (error) {
+                showStatus('Failed to save settings', 'error');
+            }
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('statusMessage');
+            const statusText = document.getElementById('statusText');
+
+            statusDiv.className = 'p-4 rounded-md mb-4';
+            statusText.textContent = message;
+
+            if (type === 'success') {
+                statusDiv.classList.add('bg-green-50', 'text-green-800');
+            } else if (type === 'error') {
+                statusDiv.classList.add('bg-red-50', 'text-red-800');
+            } else {
+                statusDiv.classList.add('bg-blue-50', 'text-blue-800');
+            }
+
+            statusDiv.classList.remove('hidden');
+
+            // Auto-hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Event listeners
+        document.getElementById('modelSelect').addEventListener('change', function(e) {
+            updateModelInfo(e.target.value);
+        });
+
+        // Load models on page load
+        window.onload = loadModels;
+    </script>
+</body>
+</html>

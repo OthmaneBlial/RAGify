@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Base - RAGify</title>
+    <!-- Updated navigation -->
+    <link rel="icon" type="image/svg+xml" href="/vite.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/" class="text-2xl font-bold text-gray-900">RAGify</a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Home</a>
+                    <a href="/chat.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Chat</a>
+                    <a href="/knowledge.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Knowledge Base</a>
+                    <a href="/settings.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-4xl mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">Knowledge Base Management</h1>
+
+            <!-- Upload Section -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">Upload Documents</h2>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <div class="mb-4">
+                        <svg class="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="text-gray-600 mb-2">Drop files here or click to browse</p>
+                        <p class="text-sm text-gray-500">Supports PDF, DOCX, and TXT files</p>
+                    </div>
+                    <input
+                        type="file"
+                        id="fileInput"
+                        multiple
+                        accept=".pdf,.docx,.txt"
+                        class="hidden"
+                        onchange="handleFileSelect(event)"
+                    >
+                    <button
+                        onclick="document.getElementById('fileInput').click()"
+                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                    >
+                        Choose Files
+                    </button>
+                </div>
+            </div>
+
+            <!-- Applications Section -->
+            <div class="mb-8">
+                <h2 class="text-lg font-semibold mb-4">Applications</h2>
+
+                <!-- Current Application Selector -->
+                <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 class="font-semibold text-blue-900 mb-2">Current Application</h3>
+                    <select id="currentAppSelect" onchange="switchApplication()" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option value="">Loading applications...</option>
+                    </select>
+                    <p class="text-sm text-blue-700 mt-2">
+                        Select an application to use for chat and document processing. The default application is always available.
+                    </p>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-4">
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-2">Create New Application</h3>
+                        <input
+                            type="text"
+                            id="appName"
+                            placeholder="Application name"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2"
+                        >
+                        <textarea
+                            id="appConfig"
+                            placeholder="Application configuration (JSON)"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md mb-2 h-20"
+                        ></textarea>
+                        <button
+                            onclick="createApplication()"
+                            class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200"
+                        >
+                            Create Application
+                        </button>
+                    </div>
+
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-2">Manage Applications</h3>
+                        <div id="applicationsList" class="space-y-2 max-h-60 overflow-y-auto">
+                            <p class="text-gray-500 text-sm">Loading applications...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Documents Section -->
+            <div>
+                <h2 class="text-lg font-semibold mb-4">Uploaded Documents</h2>
+                <div id="documentsList" class="space-y-2">
+                    <p class="text-gray-500 text-sm">No documents uploaded yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        async function handleFileSelect(event) {
+            const files = event.target.files;
+            for (let file of files) {
+                await uploadDocument(file);
+            }
+        }
+
+        async function uploadDocument(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/knowledge/upload/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Document "${file.name}" uploaded successfully!`);
+                    loadDocuments();
+                } else {
+                    const errorText = await response.text();
+                    console.error('Upload failed:', response.status, errorText);
+                    alert(`Failed to upload ${file.name}: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert(`Error uploading ${file.name}: ${error.message}`);
+            }
+        }
+
+        async function createApplication() {
+            const name = document.getElementById('appName').value;
+            const config = document.getElementById('appConfig').value;
+
+            if (!name) {
+                alert('Please enter an application name');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/applications/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        config: config ? JSON.parse(config) : {}
+                    })
+                });
+
+                if (response.ok) {
+                    alert('Application created successfully!');
+                    document.getElementById('appName').value = '';
+                    document.getElementById('appConfig').value = '';
+                    loadApplications();
+                } else {
+                    const errorText = await response.text();
+                    console.error('Create app failed:', response.status, errorText);
+                    alert(`Failed to create application: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert(`Error creating application: ${error.message}`);
+            }
+        }
+
+        async function loadApplications() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/applications/`);
+                if (response.ok) {
+                    const applications = await response.json();
+
+                    // Update current application selector
+                    const select = document.getElementById('currentAppSelect');
+                    select.innerHTML = '<option value="">Select an application...</option>';
+
+                    // Update applications list with delete buttons
+                    const list = document.getElementById('applicationsList');
+
+                    if (applications && applications.length > 0) {
+                        // Sort applications with default first
+                        applications.sort((a, b) => {
+                            if (a.name === 'Default Chat Application') return -1;
+                            if (b.name === 'Default Chat Application') return 1;
+                            return 0;
+                        });
+
+                        // Populate selector
+                        applications.forEach(app => {
+                            const option = document.createElement('option');
+                            option.value = app.id;
+                            option.textContent = app.name || 'Unnamed App';
+                            select.appendChild(option);
+                        });
+
+                        // Load current selection from localStorage
+                        const currentAppId = localStorage.getItem('currentApplicationId');
+                        if (currentAppId) {
+                            select.value = currentAppId;
+                        } else {
+                            // Default to first application
+                            select.value = applications[0].id;
+                            localStorage.setItem('currentApplicationId', applications[0].id);
+                        }
+
+                        // Populate list with delete buttons
+                        list.innerHTML = applications.map(app => {
+                            const isDefault = app.name === 'Default Chat Application';
+                            const deleteButton = isDefault ? '' :
+                                `<button onclick="deleteApplication('${app.id}')" class="text-red-600 hover:text-red-800 text-sm ml-2">
+                                    Delete
+                                </button>`;
+
+                            return `<div class="border rounded p-3 flex justify-between items-center">
+                                <div>
+                                    <strong>${app.name || 'Unnamed App'}</strong>
+                                    <p class="text-sm text-gray-600">ID: ${app.id}</p>
+                                    ${isDefault ? '<span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Default</span>' : ''}
+                                </div>
+                                ${deleteButton}
+                            </div>`;
+                        }).join('');
+                    } else {
+                        select.innerHTML = '<option value="">No applications available</option>';
+                        list.innerHTML = '<p class="text-gray-500 text-sm">No applications yet</p>';
+                    }
+                } else {
+                    console.error('Failed to load applications:', response.status);
+                    const list = document.getElementById('applicationsList');
+                    const select = document.getElementById('currentAppSelect');
+                    select.innerHTML = '<option value="">Failed to load</option>';
+                    list.innerHTML = '<p class="text-red-500 text-sm">Failed to load applications</p>';
+                }
+            } catch (error) {
+                console.error('Error loading applications:', error);
+                const list = document.getElementById('applicationsList');
+                const select = document.getElementById('currentAppSelect');
+                select.innerHTML = '<option value="">Error loading</option>';
+                list.innerHTML = '<p class="text-red-500 text-sm">Error loading applications</p>';
+            }
+        }
+
+        function switchApplication() {
+            const select = document.getElementById('currentAppSelect');
+            const selectedAppId = select.value;
+
+            if (selectedAppId) {
+                localStorage.setItem('currentApplicationId', selectedAppId);
+                // Update chat page's current application
+                if (window.location.pathname.includes('chat.html')) {
+                    window.location.reload();
+                }
+            }
+        }
+
+        async function deleteApplication(appId) {
+            if (!confirm('Are you sure you want to delete this application? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/applications/${appId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Application deleted successfully!');
+                    loadApplications();
+                } else {
+                    const error = await response.json();
+                    const errorMessage = error.detail || 'Unknown error';
+                    alert(`Failed to delete application:\n\n${errorMessage}`);
+                }
+            } catch (error) {
+                console.error('Error deleting application:', error);
+                alert(`Error deleting application: ${error.message}`);
+            }
+        }
+
+        async function loadDocuments() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/knowledge/`);
+                if (response.ok) {
+                    const documents = await response.json();
+                    const list = document.getElementById('documentsList');
+                    if (documents && documents.length > 0) {
+                        list.innerHTML = documents.map(doc =>
+                            `<div class="border rounded p-3">
+                                <strong>${doc.filename || 'Unknown file'}</strong>
+                                <p class="text-sm text-gray-600">Size: ${formatFileSize(doc.size || 0)} | Uploaded: ${doc.upload_date ? new Date(doc.upload_date).toLocaleDateString() : 'Unknown'}</p>
+                            </div>`
+                        ).join('');
+                    } else {
+                        list.innerHTML = '<p class="text-gray-500 text-sm">No documents uploaded yet</p>';
+                    }
+                } else {
+                    console.error('Failed to load documents:', response.status);
+                    const list = document.getElementById('documentsList');
+                    list.innerHTML = '<p class="text-red-500 text-sm">Failed to load documents</p>';
+                }
+            } catch (error) {
+                console.error('Error loading documents:', error);
+                const list = document.getElementById('documentsList');
+                list.innerHTML = '<p class="text-red-500 text-sm">Error loading documents</p>';
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Load data on page load
+        window.onload = function() {
+            loadApplications();
+            loadDocuments();
+        };
+    </script>
+</body>
+</html>
