@@ -68,6 +68,7 @@ class RetrievalService:
         query: str,
         db: AsyncSession,
         knowledge_base_ids: Optional[List[UUID]] = None,
+        application_id: Optional[UUID] = None,
         limit: Optional[int] = None,
     ) -> List[RetrievalResult]:
         """
@@ -94,12 +95,12 @@ class RetrievalService:
         if knowledge_base_ids:
             for kb_id in knowledge_base_ids:
                 kb_results = await search_embeddings_by_similarity(
-                    db, query_vector, limit, kb_id, self.similarity_threshold
+                    db, query_vector, limit, kb_id, application_id, self.similarity_threshold
                 )
                 results.extend(kb_results)
         else:
             results = await search_embeddings_by_similarity(
-                db, query_vector, limit, None, self.similarity_threshold
+                db, query_vector, limit, None, application_id, self.similarity_threshold
             )
 
         # Convert to RetrievalResult objects and sort by score
@@ -128,6 +129,7 @@ class RetrievalService:
         query: str,
         db: AsyncSession,
         knowledge_base_ids: Optional[List[UUID]] = None,
+        application_id: Optional[UUID] = None,
         limit: Optional[int] = None,
     ) -> List[RetrievalResult]:
         """
@@ -169,6 +171,10 @@ class RetrievalService:
             for i, kb_id in enumerate(knowledge_base_ids):
                 params[f"kb_id_{i}"] = kb_id
 
+        if application_id:
+            sql_query += " AND d.application_id = :app_id"
+            params["app_id"] = application_id
+
         sql_query += " ORDER BY rank_score DESC LIMIT :limit"
         params["limit"] = limit
 
@@ -197,6 +203,7 @@ class RetrievalService:
         query: str,
         db: AsyncSession,
         knowledge_base_ids: Optional[List[UUID]] = None,
+        application_id: Optional[UUID] = None,
         limit: Optional[int] = None,
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
@@ -219,8 +226,8 @@ class RetrievalService:
             limit = self.max_results
 
         # Perform both searches concurrently
-        semantic_task = self.semantic_search(query, db, knowledge_base_ids, limit * 2)
-        keyword_task = self.keyword_search(query, db, knowledge_base_ids, limit * 2)
+        semantic_task = self.semantic_search(query, db, knowledge_base_ids, application_id, limit * 2)
+        keyword_task = self.keyword_search(query, db, knowledge_base_ids, application_id, limit * 2)
 
         semantic_results, keyword_results = await asyncio.gather(
             semantic_task, keyword_task
@@ -279,6 +286,7 @@ class RetrievalService:
         query: str,
         db: AsyncSession,
         knowledge_base_ids: Optional[List[UUID]] = None,
+        application_id: Optional[UUID] = None,
         context_window: int = 1000,
         search_type: str = "hybrid",
     ) -> List[RetrievalResult]:
@@ -297,11 +305,11 @@ class RetrievalService:
         """
         # Perform search based on type
         if search_type == "semantic":
-            results = await self.semantic_search(query, db, knowledge_base_ids)
+            results = await self.semantic_search(query, db, knowledge_base_ids, application_id)
         elif search_type == "keyword":
-            results = await self.keyword_search(query, db, knowledge_base_ids)
+            results = await self.keyword_search(query, db, knowledge_base_ids, application_id)
         elif search_type == "hybrid":
-            results = await self.hybrid_search(query, db, knowledge_base_ids)
+            results = await self.hybrid_search(query, db, knowledge_base_ids, application_id)
         else:
             raise ValueError(f"Unknown search type: {search_type}")
 

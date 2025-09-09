@@ -1,11 +1,10 @@
 from sqlalchemy import String, Text, DateTime, ForeignKey, Column
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
 from uuid import uuid4
 from datetime import datetime, timezone
 
-Base = declarative_base()
+from backend.modules.knowledge.models import Base
 
 
 class Application(Base):
@@ -24,6 +23,7 @@ class Application(Base):
     )
 
     versions = relationship("ApplicationVersion", back_populates="application")
+    documents = relationship("Document", back_populates="application")
 
 
 class ApplicationVersion(Base):

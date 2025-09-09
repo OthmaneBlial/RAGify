@@ -11,8 +11,7 @@ import logging
 from contextlib import asynccontextmanager
 from .core.database import engine, warmup_connections
 from .core.async_tasks import task_manager
-from .modules.knowledge.models import Base as KnowledgeBase
-from .modules.applications.models import Base as ApplicationBase
+from .modules.knowledge.models import Base
 from .modules.applications.models import ChatMessage
 from .modules.models.model_manager import model_manager
 from .api.v1 import api_router
@@ -28,8 +27,7 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables and warmup connections
     logger.info("Starting RAGify application...")
     async with engine.begin() as conn:
-        await conn.run_sync(KnowledgeBase.metadata.create_all)
-        await conn.run_sync(ApplicationBase.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
         # Create ChatMessage table
         await conn.run_sync(ChatMessage.__table__.create, checkfirst=True)
 

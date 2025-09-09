@@ -7,6 +7,7 @@ class DocumentBase(BaseModel):
     title: str
     content: str
     knowledge_base_id: UUID4
+    application_id: UUID4
     processing_status: Optional[str] = "pending"
 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from uuid import UUID
+import logging
 
 from backend.core.database import get_db
 from backend.modules.knowledge.crud import (
@@ -12,10 +13,13 @@ from backend.modules.knowledge.crud import (
     list_knowledge_bases,
     create_document,
     list_documents_by_knowledge_base,
+    list_documents_by_application,
     get_document,
+    delete_document,
     search_paragraphs_by_text,
     get_embeddings_stats,
 )
+from backend.modules.applications.crud import get_application_with_config
 from backend.modules.knowledge.processing import processing_service
 from shared.models.KnowledgeBase import (
     KnowledgeBaseCreate,
@@ -25,24 +29,31 @@ from shared.models.KnowledgeBase import (
 from shared.models.Document import Document
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # Knowledge overview endpoint
 @router.get("/")
-async def get_knowledge_overview(db: AsyncSession = Depends(get_db)):
+async def get_knowledge_overview(
+    application_id: Optional[UUID] = None, db: AsyncSession = Depends(get_db)
+):
     """
     Get knowledge overview - documents list for frontend.
+    Optionally filter by application_id.
     """
     try:
-        # Get all knowledge bases
-        knowledge_bases = await list_knowledge_bases(db)
+        if application_id:
+            # Verify application exists
+            application = await get_application_with_config(db, application_id)
+            if not application:
+                raise HTTPException(status_code=404, detail="Application not found")
 
-        # Collect all documents from all knowledge bases
-        documents = []
-        for kb in knowledge_bases:
-            # Get documents for this knowledge base
-            docs = await list_documents_by_knowledge_base(db, kb.id)
+            # Get documents for this application
+            docs = await list_documents_by_application(db, application_id)
+            documents = []
             for doc in docs:
+                kb = await get_knowledge_base(db, doc.knowledge_base_id)
+                kb_name = kb.name if kb else "Unknown KB"
                 documents.append(
                     {
                         "id": str(doc.id),
@@ -53,12 +64,55 @@ async def get_knowledge_overview(db: AsyncSession = Depends(get_db)):
                         "upload_date": (
                             doc.created_at.isoformat() if doc.created_at else None
                         ),
-                        "knowledge_base_id": str(kb.id),
-                        "knowledge_base_name": kb.name,
+                        "knowledge_base_id": str(doc.knowledge_base_id),
+                        "knowledge_base_name": kb_name,
+                        "application_name": application["name"],
                     }
                 )
+        else:
+            # Get all knowledge bases
+            knowledge_bases = await list_knowledge_bases(db)
+
+            # Collect all documents from all knowledge bases
+            documents = []
+            for kb in knowledge_bases:
+                # Get documents for this knowledge base
+                docs = await list_documents_by_knowledge_base(db, kb.id)
+                for doc in docs:
+                    # Find which application this knowledge base belongs to
+                    app_name = "Unknown Application"
+                    try:
+                        # This is a simplified approach - in a real implementation,
+                        # you'd have a proper relationship between applications and knowledge bases
+                        from backend.modules.applications.crud import list_applications
+                        applications = await list_applications(db)
+                        for app in applications:
+                            kb_ids = app.get("config", {}).get("knowledge_base_ids", [])
+                            if str(kb.id) in kb_ids:
+                                app_name = app["name"]
+                                break
+                    except Exception:
+                        pass
+
+                    documents.append(
+                        {
+                            "id": str(doc.id),
+                            "filename": doc.title,
+                            "size": (
+                                len(doc.content) if doc.content else 0
+                            ),  # Approximate size
+                            "upload_date": (
+                                doc.created_at.isoformat() if doc.created_at else None
+                            ),
+                            "knowledge_base_id": str(kb.id),
+                            "knowledge_base_name": kb.name,
+                            "application_name": app_name,
+                        }
+                    )
 
         return documents
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to get knowledge overview: {str(e)}"
@@ -68,12 +122,21 @@ async def get_knowledge_overview(db: AsyncSession = Depends(get_db)):
 # Upload document endpoint
 @router.post("/upload/")
 async def upload_document_to_knowledge_base(
-    file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    file: UploadFile = File(...),
+    application_id: Optional[UUID] = None,
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Upload a document to the default knowledge base.
+    Optionally associate with an application.
     """
     try:
+        if application_id:
+            # Verify application exists
+            application = await get_application_with_config(db, application_id)
+            if not application:
+                raise HTTPException(status_code=404, detail="Application not found")
+
         # Check if we have a default knowledge base
         knowledge_bases = await list_knowledge_bases(db)
         if not knowledge_bases:
@@ -109,14 +172,15 @@ async def upload_document_to_knowledge_base(
         # Use extracted text as document content
         extracted_text = processing_result["cleaned_text"]
 
-        # Create document
-        doc = await create_document(db, file.filename, extracted_text, kb_id)
+        # Create document with optional application_id
+        doc = await create_document(db, file.filename, extracted_text, kb_id, application_id)
 
         return {
             "success": True,
             "document_id": str(doc.id),
             "filename": doc.title,
             "knowledge_base_id": str(kb_id),
+            "application_id": str(application_id) if application_id else None,
             "message": f"Document '{file.filename}' uploaded successfully",
         }
 
@@ -225,11 +289,54 @@ async def get_document_processing_status(
     }
 
 
+@router.delete("/documents/{doc_id}")
+async def delete_document_endpoint(doc_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Delete a document and all its associated data (paragraphs and embeddings)."""
+    # Check if document exists
+    doc = await get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+        # Delete in correct order to handle foreign key constraints:
+        # 1. Delete embeddings (referenced by paragraphs)
+        # 2. Delete paragraphs (referenced by document)
+        # 3. Delete document
+
+        # Get all paragraphs for this document
+        from backend.modules.knowledge.crud import list_paragraphs_by_document
+        paragraphs = await list_paragraphs_by_document(db, doc_id)
+
+        # Delete embeddings for each paragraph
+        for paragraph in paragraphs:
+            from backend.modules.knowledge.crud import get_embedding_by_paragraph
+            embedding = await get_embedding_by_paragraph(db, paragraph.id)
+            if embedding:
+                await db.delete(embedding)
+
+        # Delete all paragraphs for this document
+        for paragraph in paragraphs:
+            await db.delete(paragraph)
+
+        # Finally delete the document
+        await db.delete(doc)
+
+        # Commit all changes
+        await db.commit()
+
+        return {"message": f"Document '{doc.title}' deleted successfully"}
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
+
 # Search endpoints
 @router.post("/search/")
 async def search_knowledge_bases(
     query: str,
     knowledge_base_id: Optional[UUID] = None,
+    application_id: Optional[UUID] = None,
     limit: int = 10,
     threshold: Optional[float] = None,
     db: AsyncSession = Depends(get_db),
@@ -240,6 +347,7 @@ async def search_knowledge_bases(
     Args:
         query: Search query text
         knowledge_base_id: Optional filter by specific knowledge base
+        application_id: Optional filter by specific application
         limit: Maximum number of results
         threshold: Optional similarity threshold (0-1)
         db: Database session
@@ -251,8 +359,14 @@ async def search_knowledge_bases(
         return {"results": [], "query": query, "total_results": 0}
 
     try:
+        if application_id:
+            # Verify application exists
+            application = await get_application_with_config(db, application_id)
+            if not application:
+                raise HTTPException(status_code=404, detail="Application not found")
+
         # Perform semantic search
-        results = await search_paragraphs_by_text(db, query, limit, knowledge_base_id)
+        results = await search_paragraphs_by_text(db, query, limit, knowledge_base_id, application_id)
 
         # Filter by threshold if specified
         if threshold is not None:
@@ -263,9 +377,12 @@ async def search_knowledge_bases(
             "query": query,
             "total_results": len(results),
             "knowledge_base_id": str(knowledge_base_id) if knowledge_base_id else None,
+            "application_id": str(application_id) if application_id else None,
             "threshold": threshold,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 

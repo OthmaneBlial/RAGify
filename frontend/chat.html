@@ -6,6 +6,134 @@
     <title>Chat - RAGify</title>
     <link rel="icon" type="image/svg+xml" href="/vite.svg">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* Markdown table styling */
+        .chat-bubble table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.875rem;
+        }
+        .chat-bubble th,
+        .chat-bubble td {
+            border: 1px solid #e5e7eb;
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+        }
+        .chat-bubble th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        .chat-bubble tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        .chat-bubble tr:hover {
+            background-color: #f3f4f6;
+        }
+
+        /* Code blocks styling */
+        .chat-bubble pre {
+            background-color: #f3f4f6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        .chat-bubble code {
+            background-color: #f3f4f6;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.875em;
+        }
+        .chat-bubble pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        /* List styling */
+        .chat-bubble ul,
+        .chat-bubble ol {
+            margin: 1rem 0;
+            padding-left: 1.5rem;
+        }
+        .chat-bubble li {
+            margin: 0.25rem 0;
+        }
+
+        /* Link styling */
+        .chat-bubble a {
+            color: #3b82f6;
+            text-decoration: underline;
+        }
+        .chat-bubble a:hover {
+            color: #1d4ed8;
+        }
+
+        /* Chat message differentiation */
+        .chat-bubble.user {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: auto;
+            margin-right: 0;
+            max-width: 80%;
+            border-radius: 1rem 1rem 0.25rem 1rem;
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+            padding: 0.75rem 1rem;
+        }
+
+        .chat-bubble.user p {
+            color: white;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .chat-bubble.assistant {
+            background-color: #f3f4f6;
+            color: #374151;
+            margin-left: 0;
+            margin-right: auto;
+            max-width: 80%;
+            border-radius: 1rem 1rem 1rem 0.25rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 0.75rem 1rem;
+        }
+
+        .chat-bubble.assistant p {
+            color: #374151;
+            margin: 0 0 0.5rem 0;
+            line-height: 1.5;
+        }
+
+        .chat-bubble.assistant p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Override markdown colors for assistant messages */
+        .chat-bubble.assistant table th {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+
+        .chat-bubble.assistant table tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+
+        .chat-bubble.assistant table tr:hover {
+            background-color: #e5e7eb;
+        }
+
+        .chat-bubble.assistant pre {
+            background-color: #e5e7eb;
+        }
+
+        .chat-bubble.assistant code {
+            background-color: #e5e7eb;
+            color: #111827;
+        }
+    </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
     <!-- Navigation -->
@@ -118,7 +246,14 @@
             const messages = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-bubble ${sender}`;
-            messageDiv.innerHTML = `<p>${text}</p>`;
+
+            // Render markdown for assistant messages, keep plain text for user messages
+            if (sender === 'assistant') {
+                messageDiv.innerHTML = marked.parse(text);
+            } else {
+                messageDiv.innerHTML = `<p>${text}</p>`;
+            }
+
             messages.appendChild(messageDiv);
             messages.scrollTop = messages.scrollHeight;
         }
