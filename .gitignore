@@ -5,3 +5,4 @@ venv
 ragify.egg-info
 .ruff_cache
 .env
+bin
