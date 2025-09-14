@@ -1,0 +1,81 @@
+# CI Testing Dockerfile for RAGify
+FROM python:3.12-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy project files
+COPY . .
+
+# Install Python dependencies
+RUN pip install --upgrade pip \
+    && pip install -e . \
+    && pip install pytest pytest-cov pytest-asyncio black isort flake8 build twine setuptools wheel
+
+# Create a script to run the CI tests
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "========================================="\n\
+echo "RAGify CI Tests in Docker Container"\n\
+echo "========================================="\n\
+\n\
+# For this simplified version, we will use SQLite for testing\n\
+# to avoid Docker-in-Docker complexity\n\
+\n\
+# Set environment variables for SQLite testing\n\
+export DATABASE_URL="sqlite+aiosqlite:///:memory:"\n\
+export REDIS_URL="redis://localhost:6379"\n\
+export SECRET_KEY="test-secret-key-for-ci"\n\
+export DEBUG="true"\n\
+export OPENROUTER_API_KEY="sk-or-v1-test-key-for-ci"\n\
+\n\
+echo "========================================="\n\
+echo "Running Code Quality Checks"\n\
+echo "========================================="\n\
+\n\
+echo "Running Black..."\n\
+black --check --diff .\n\
+\n\
+echo "Running isort..."\n\
+isort --check-only --diff .\n\
+\n\
+echo "Running flake8..."\n\
+flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics\n\
+flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics\n\
+\n\
+echo "========================================="\n\
+echo "Running Tests (SQLite mode)"\n\
+echo "========================================="\n\
+\n\
+echo "Database URL: $DATABASE_URL"\n\
+echo "Note: Using SQLite for simplified testing"\n\
+echo ""\n\
+\n\
+# Run tests (will use SQLite as configured in conftest.py)\n\
+pytest --cov=backend --cov-report=xml --cov-report=term-missing -v\n\
+\n\
+echo "========================================="\n\
+echo "Testing Package Build"\n\
+echo "========================================="\n\
+\n\
+python -m build\n\
+ls -la dist/\n\
+\n\
+echo "========================================="\n\
+echo "🎉 All CI Tests Passed!"\n\
+echo "========================================="\n\
+\n\
+echo "Note: This test used SQLite instead of PostgreSQL for simplicity."\n\
+echo "For full PostgreSQL testing, run the local script with Docker access."\n\
+' > /app/run_ci_tests.sh && chmod +x /app/run_ci_tests.sh
+
+# Default command
+CMD ["/app/run_ci_tests.sh"]

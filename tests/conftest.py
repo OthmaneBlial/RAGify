@@ -33,7 +33,7 @@ def event_loop():
 
 
 @pytest.fixture(scope="session")
-async def test_engine():
+def test_engine():
     """Create a test database engine."""
     # Use SQLite for testing
     engine = create_async_engine(
@@ -43,12 +43,30 @@ async def test_engine():
         connect_args={"check_same_thread": False},
     )
 
-    # Create all tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Create all tables synchronously
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(create_tables(engine))
+    finally:
+        loop.close()
 
     yield engine
-    await engine.dispose()
+    # Dispose synchronously
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(engine.dispose())
+    finally:
+        loop.close()
+
+
+async def create_tables(engine):
+    """Create all database tables."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 @pytest_asyncio.fixture
@@ -152,12 +170,30 @@ def mock_retrieval_service():
 
 
 @pytest.fixture
-def test_client():
+def test_client(test_engine):
     """FastAPI test client fixture."""
     from fastapi.testclient import TestClient
     from backend.main import app
+    import backend.core.database as db_module
 
-    return TestClient(app)
+    # Override the database engine for testing
+    original_engine = db_module.engine
+    db_module.engine = test_engine
+
+    # Also override the session makers
+    original_session_local = db_module.AsyncSessionLocal
+    db_module.AsyncSessionLocal = db_module.sessionmaker(
+        test_engine,
+        class_=db_module.AsyncSession,
+        expire_on_commit=False,
+    )
+
+    try:
+        yield TestClient(app)
+    finally:
+        # Restore original engine and session maker
+        db_module.engine = original_engine
+        db_module.AsyncSessionLocal = original_session_local
 
 
 @pytest.fixture

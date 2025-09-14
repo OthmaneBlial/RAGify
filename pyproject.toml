@@ -5,12 +5,27 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ragify"
 version = "0.1.0"
+description = "A Retrieval-Augmented Generation (RAG) application"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "RAGify Team", email = "team@ragify.com"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "uvicorn",
     "sqlalchemy",
     "psycopg2-binary",
     "asyncpg",
+    "pgvector",
     "sentence-transformers",
     "faiss-cpu",
     "streamlit",
@@ -23,7 +38,22 @@ dependencies = [
     "aiohttp",
     "tenacity",
     "slowapi",
-    "psutil"
+    "psutil",
+    "redis",
+    "cachetools",
+    "alembic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "black",
+    "isort",
+    "flake8",
+    "autoflake",
+    "ruff",
 ]
 
 [tool.setuptools.packages.find]
