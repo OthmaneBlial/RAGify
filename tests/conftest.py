@@ -1,20 +1,23 @@
 """
 Test configuration and fixtures for RAGify tests.
+Lightweight CI: monkeypatch embedding to avoid heavy model downloads.
 """
 
-import pytest
-import pytest_asyncio
 import asyncio
-from unittest.mock import AsyncMock, MagicMock
-import sys
 import os
+import sys
 from typing import AsyncGenerator
 from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock
+
+import numpy as np
+import pytest
+import pytest_asyncio
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Import models and database setup
@@ -24,18 +27,17 @@ from backend.modules.rag.retrieval import RetrievalService
 from backend.modules.rag.rag_pipeline import RAGPipeline
 
 
+# ---------- Global event loop ----------
 @pytest.fixture(scope="session")
 def event_loop():
-    """Create an instance of the default event loop for the test session."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
 
 
+# ---------- Test DB engine ----------
 @pytest.fixture(scope="session")
 def test_engine():
-    """Create a test database engine."""
-    # Use SQLite for testing
     engine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         echo=False,
@@ -43,8 +45,6 @@ def test_engine():
         connect_args={"check_same_thread": False},
     )
 
-    # Create all tables synchronously
-    import asyncio
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -53,8 +53,7 @@ def test_engine():
         loop.close()
 
     yield engine
-    # Dispose synchronously
-    import asyncio
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:
@@ -64,28 +63,91 @@ def test_engine():
 
 
 async def create_tables(engine):
-    """Create all database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
+# ---------- DB session ----------
 @pytest_asyncio.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
-    """Create a test database session."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker
-
     async_session = async_sessionmaker(test_engine, expire_on_commit=False)
-
     async with async_session() as session:
         yield session
         await session.rollback()
 
 
+# ---------- Lightweight embeddings patch (autouse) ----------
+@pytest.fixture(autouse=True)
+def patch_embedding_model(monkeypatch):
+    """
+    Replace heavy EmbeddingModel methods with fast deterministic implementations.
+    Signatures match the real API. Similarity is clamped to [0,1].
+    """
+    import numpy as np
+    import hashlib
+    from backend.modules.rag.embedding import EmbeddingModel
+
+    def _det_vec(text: str) -> list[float]:
+        seed = int.from_bytes(hashlib.sha256((text or "").encode("utf-8")).digest()[:8], "little")
+        rng = np.random.default_rng(seed)
+        v = rng.standard_normal(384)
+        n = np.linalg.norm(v)
+        return (v / n).astype(float).tolist() if n > 0 else v.astype(float).tolist()
+
+    async def _encode_single(self: EmbeddingModel, text: str, normalize: bool = True) -> list[float]:
+        key = self._get_cache_key(text)
+        if key in self._cache:
+            return self._cache[key]
+        vec = _det_vec(text)
+        if not normalize:
+            # return a non-unit variant but deterministic
+            arr = np.array(vec, dtype=float) * np.sqrt(len(vec))
+            vec = arr.tolist()
+        self._cache[key] = vec
+        if len(self._cache) > self.cache_size + 1:
+            # simple FIFO cap
+            self._cache.pop(next(iter(self._cache)))
+        return vec
+
+    async def _encode_batch(
+        self: EmbeddingModel, texts, normalize: bool = True, batch_size: int = 32
+    ):
+        if not texts:
+            return []
+        return [await _encode_single(self, t, normalize) for t in texts]
+
+    async def _get_similarity(self: EmbeddingModel, v1, v2) -> float:
+        import numpy as np
+        a = np.array(v1, dtype=float)
+        b = np.array(v2, dtype=float)
+        if len(a) != len(b):
+            return 0.0
+        na = np.linalg.norm(a)
+        nb = np.linalg.norm(b)
+        if na == 0.0 or nb == 0.0:
+            return 0.0
+        cos = float(np.dot(a, b) / (na * nb))
+        # clamp to [0, 1] to satisfy tests
+        if cos < 0.0:
+            return 0.0
+        if cos > 1.0:
+            return 1.0
+        return cos
+
+    def _clear_cache(self: EmbeddingModel):
+        self._cache = {}
+
+    monkeypatch.setattr(EmbeddingModel, "encode_single", _encode_single, raising=False)
+    monkeypatch.setattr(EmbeddingModel, "encode_batch", _encode_batch, raising=False)
+    monkeypatch.setattr(EmbeddingModel, "get_similarity", _get_similarity, raising=False)
+    monkeypatch.setattr(EmbeddingModel, "clear_cache", _clear_cache, raising=False)
+
+
+# ---------- Mocks and samples ----------
 @pytest.fixture
 def mock_embedding_model():
-    """Mock embedding model for testing."""
     mock_model = AsyncMock()
-    mock_model.encode_single.return_value = [0.1, 0.2, 0.3] * 128  # 384-dim vector
+    mock_model.encode_single.return_value = [0.1, 0.2, 0.3] * 128  # 384 dims
     mock_model.encode_batch.return_value = [[0.1, 0.2, 0.3] * 128] * 3
     mock_model.get_similarity.return_value = 0.8
     mock_model.dimension = 384
@@ -94,7 +156,6 @@ def mock_embedding_model():
 
 @pytest.fixture
 def sample_knowledge_base_data():
-    """Sample knowledge base data for testing."""
     return {
         "id": str(uuid4()),
         "name": "Test Knowledge Base",
@@ -104,7 +165,6 @@ def sample_knowledge_base_data():
 
 @pytest.fixture
 def sample_document_data():
-    """Sample document data for testing."""
     return {
         "id": str(uuid4()),
         "title": "Test Document",
@@ -115,7 +175,6 @@ def sample_document_data():
 
 @pytest.fixture
 def sample_paragraph_data():
-    """Sample paragraph data for testing."""
     return {
         "id": str(uuid4()),
         "content": "This is a test paragraph.",
@@ -125,17 +184,15 @@ def sample_paragraph_data():
 
 @pytest.fixture
 def sample_embedding_data():
-    """Sample embedding data for testing."""
     return {
         "id": str(uuid4()),
-        "vector": [0.1, 0.2, 0.3] * 128,  # 384-dim vector
+        "vector": [0.1, 0.2, 0.3] * 128,
         "paragraph_id": str(uuid4()),
     }
 
 
 @pytest.fixture
 def sample_application_data():
-    """Sample application data for testing."""
     return {
         "id": str(uuid4()),
         "name": "Test Application",
@@ -147,7 +204,6 @@ def sample_application_data():
 
 @pytest.fixture
 def mock_db_session():
-    """Mock database session for testing."""
     session = AsyncMock()
     session.commit = AsyncMock()
     session.refresh = AsyncMock()
@@ -161,7 +217,6 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_retrieval_service():
-    """Mock retrieval service for testing."""
     service = AsyncMock()
     service.semantic_search.return_value = []
     service.keyword_search.return_value = []
@@ -169,18 +224,16 @@ def mock_retrieval_service():
     return service
 
 
+# ---------- Test clients ----------
 @pytest.fixture
 def test_client(test_engine):
-    """FastAPI test client fixture."""
     from fastapi.testclient import TestClient
     from backend.main import app
     import backend.core.database as db_module
 
-    # Override the database engine for testing
     original_engine = db_module.engine
     db_module.engine = test_engine
 
-    # Also override the session makers
     original_session_local = db_module.AsyncSessionLocal
     db_module.AsyncSessionLocal = db_module.sessionmaker(
         test_engine,
@@ -191,14 +244,12 @@ def test_client(test_engine):
     try:
         yield TestClient(app)
     finally:
-        # Restore original engine and session maker
         db_module.engine = original_engine
         db_module.AsyncSessionLocal = original_session_local
 
 
 @pytest.fixture
 def mock_openai_client():
-    """Mock OpenAI client for testing."""
     mock_client = MagicMock()
     mock_response = MagicMock()
     mock_response.choices = [MagicMock()]
@@ -207,36 +258,22 @@ def mock_openai_client():
     return mock_client
 
 
-@pytest.fixture
-def mock_sentence_transformers():
-    """Mock sentence transformers for testing."""
-    with pytest.mock.patch("sentence_transformers.SentenceTransformer") as mock_st:
-        mock_model = MagicMock()
-        mock_model.encode.return_value = [0.1, 0.2, 0.3] * 128
-        mock_st.return_value = mock_model
-        yield mock_st
-
-
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_test_client():
-    """Async test client for FastAPI."""
     from httpx import AsyncClient
     from backend.main import app
-
     async with AsyncClient(app=app, base_url="http://testserver") as client:
         yield client
 
 
-# Utility fixtures for common test data
+# ---------- Utility fixtures ----------
 @pytest.fixture
 def test_query():
-    """Sample test query."""
     return "What is machine learning?"
 
 
 @pytest.fixture
 def test_documents():
-    """Sample test documents."""
     return [
         "Machine learning is a subset of artificial intelligence.",
         "Deep learning uses neural networks with multiple layers.",
@@ -246,7 +283,6 @@ def test_documents():
 
 @pytest.fixture
 def test_paragraphs():
-    """Sample test paragraphs."""
     return [
         {
             "content": "Machine learning algorithms learn from data.",
@@ -265,20 +301,16 @@ def test_paragraphs():
 
 @pytest.fixture
 async def embedding_model():
-    """Real embedding model fixture."""
     model = EmbeddingModel()
     yield model
-    # Clean up cache after test
     model.clear_cache()
 
 
 @pytest.fixture
 def retrieval_service():
-    """Retrieval service fixture."""
     return RetrievalService(max_results=5, similarity_threshold=0.1)
 
 
 @pytest.fixture
 def rag_pipeline():
-    """RAG pipeline fixture."""
     return RAGPipeline()

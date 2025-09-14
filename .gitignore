@@ -6,3 +6,5 @@ ragify.egg-info
 .ruff_cache
 .env
 bin
+coverage.xml
+dist/
