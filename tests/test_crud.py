@@ -794,18 +794,21 @@ class TestKnowledgeCRUD:
 
     @pytest.mark.asyncio
     async def test_search_embeddings_by_similarity_sqlite_compatibility(self, db_session):
-        """Test search embeddings by similarity (mocked for SQLite compatibility)"""
+        """Test search embeddings by similarity (graceful SQLite compatibility)"""
         # Since we're using SQLite, pgvector operations won't work
-        # This test verifies the function handles SQLite gracefully
+        # This test verifies the function handles SQLite gracefully and returns empty results
         query_vector = [0.1, 0.2, 0.3] * 128
 
-        # This should raise an OperationalError due to SQLite not supporting <=>
-        with pytest.raises(Exception):  # Could be OperationalError or similar
-            await search_embeddings_by_similarity(
-                db=db_session,
-                query_vector=query_vector,
-                limit=5
-            )
+        # This should now handle SQLite gracefully and return empty results
+        results = await search_embeddings_by_similarity(
+            db=db_session,
+            query_vector=query_vector,
+            limit=5
+        )
+
+        # Should return empty list for SQLite compatibility
+        assert isinstance(results, list)
+        assert len(results) == 0
 
     @pytest.mark.asyncio
     async def test_search_paragraphs_by_text(self, db_session):
@@ -824,12 +827,14 @@ class TestKnowledgeCRUD:
         with patch('backend.modules.rag.embedding.encode_text') as mock_encode:
             mock_encode.return_value = vector
 
-            # This should raise an exception due to SQLite vector incompatibility
-            with pytest.raises(Exception):
-                await search_paragraphs_by_text(
-                    db=db_session,
-                    query_text="test query",
-                    limit=5
-                )
+            # This should now handle SQLite gracefully and return empty results
+            results = await search_paragraphs_by_text(
+                db=db_session,
+                query_text="test query",
+                limit=5
+            )
 
+            # Should return empty list for SQLite compatibility
+            assert isinstance(results, list)
+            assert len(results) == 0
             mock_encode.assert_called_once_with("test query")

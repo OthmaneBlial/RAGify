@@ -17,6 +17,11 @@ import pytest_asyncio
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
+# Set up test environment variables
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing-purposes-only")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("OPENAI_API_KEY", "test-key")
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
