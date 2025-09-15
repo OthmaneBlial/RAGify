@@ -411,7 +411,7 @@ async def upload_document_to_application(
         logger.info(f"Document uploaded: {doc.title} for application {app_id}")
 
         # Return the Document model
-        return Document.from_orm(doc)
+        return Document.model_validate(doc)
 
     except HTTPException:
         raise
