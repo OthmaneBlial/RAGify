@@ -86,6 +86,63 @@ class TestDatabaseConnection:
         assert True
 
 
+class TestSecurity:
+    """Test security functions."""
+
+    def test_verify_password(self):
+        """Test password verification."""
+        from backend.core.security import verify_password, get_password_hash
+
+        password = "testpassword"
+        hashed = get_password_hash(password)
+
+        assert verify_password(password, hashed)
+        assert not verify_password("wrongpassword", hashed)
+
+    def test_get_password_hash(self):
+        """Test password hashing."""
+        from backend.core.security import get_password_hash
+
+        password = "testpassword"
+        hashed = get_password_hash(password)
+
+        assert hashed != password
+        assert len(hashed) > 0
+
+    def test_create_access_token(self):
+        """Test JWT token creation."""
+        from backend.core.security import create_access_token
+        from datetime import timedelta
+
+        data = {"sub": "testuser"}
+        token = create_access_token(data)
+
+        assert isinstance(token, str)
+        assert len(token) > 0
+
+        # Test with custom expiration
+        custom_expire = timedelta(minutes=30)
+        token_custom = create_access_token(data, custom_expire)
+
+        assert isinstance(token_custom, str)
+        assert len(token_custom) > 0
+
+    def test_decode_access_token(self):
+        """Test JWT token decoding."""
+        from backend.core.security import create_access_token, decode_access_token
+
+        data = {"sub": "testuser"}
+        token = create_access_token(data)
+
+        decoded = decode_access_token(token)
+        assert decoded is not None
+        assert decoded["sub"] == "testuser"
+
+        # Test invalid token
+        invalid_decoded = decode_access_token("invalid.token.here")
+        assert invalid_decoded is None
+
+
 class TestPydanticModels:
     """Test Pydantic model validation and functionality."""
 
@@ -118,13 +175,15 @@ class TestPydanticModels:
     def test_model_validation(self):
         """Test Pydantic model validation."""
         from shared.models.KnowledgeBase import KnowledgeBaseCreate
+        from pydantic import ValidationError, field_validator
 
         # Test valid data
         valid_data = {"name": "Valid Name"}
         kb = KnowledgeBaseCreate(**valid_data)
         assert kb.name == "Valid Name"
 
-        # Test empty name (currently allowed)
+        # Test empty name - current model allows empty strings
+        # If validation is needed, add constraints to the model
         kb_empty = KnowledgeBaseCreate(name="")
         assert kb_empty.name == ""
 
