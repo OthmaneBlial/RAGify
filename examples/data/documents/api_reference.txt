@@ -1,0 +1,111 @@
+# API Reference
+
+## Overview
+This API provides endpoints for managing users, widgets, and other resources. All requests must be authenticated using API keys.
+
+## Authentication
+Authentication is handled via API keys passed in the Authorization header.
+
+### Header Format
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+### Obtaining an API Key
+API keys can be obtained from the developer dashboard at https://api.example.com/dashboard.
+
+## Endpoints
+
+### Users
+
+#### GET /users
+Retrieves a list of users.
+
+**Authentication:** Required  
+**Method:** GET  
+**URL:** /users  
+**Parameters:**  
+- limit (optional): Number of users to return (default: 10)  
+- offset (optional): Offset for pagination (default: 0)  
+
+**Response:**  
+```json
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com"
+    }
+  ],
+  "total": 100
+}
+```
+
+#### POST /users
+Creates a new user.
+
+**Authentication:** Required  
+**Method:** POST  
+**URL:** /users  
+**Body:**  
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "password": "securepassword"
+}
+```
+
+**Response:**  
+```json
+{
+  "id": 2,
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "created_at": "2023-01-01T00:00:00Z"
+}
+```
+
+### Widgets
+
+#### POST /widgets
+Creates a new widget.
+
+**Authentication:** Required  
+**Method:** POST  
+**URL:** /widgets  
+**Body:**  
+```json
+{
+  "name": "My Widget",
+  "description": "A sample widget",
+  "color": "blue"
+}
+```
+
+**Response:**  
+```json
+{
+  "id": 1,
+  "name": "My Widget",
+  "description": "A sample widget",
+  "color": "blue",
+  "created_at": "2023-01-01T00:00:00Z"
+}
+```
+
+## Rate Limits
+- 100 requests per minute per API key
+- 1000 requests per hour per API key
+- 10000 requests per day per API key
+
+Exceeding rate limits will result in a 429 Too Many Requests response.
+
+## Error Codes
+- 400: Bad Request
+- 401: Unauthorized
+- 403: Forbidden
+- 404: Not Found
+- 429: Too Many Requests
+- 500: Internal Server Error

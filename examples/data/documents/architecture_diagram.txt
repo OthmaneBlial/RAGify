@@ -1,0 +1,240 @@
+# System Architecture Diagram
+
+## High-Level Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Client Apps   │    │   API Gateway   │    │  Load Balancer  │
+│                 │    │                 │    │                 │
+│ - Web Browsers  │◄──►│ - Rate Limiting │◄──►│ - Nginx/HAProxy │
+│ - Mobile Apps   │    │ - Authentication│    │ - SSL/TLS       │
+│ - Third-party   │    │ - Request Routing│    │ - Health Checks │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                          │
+                                                          ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Application    │    │   Database      │    │   Cache Layer   │
+│   Servers       │◄──►│   (PostgreSQL)  │    │   (Redis)       │
+│                 │    │                 │    │                 │
+│ - FastAPI App   │    │ - Users         │    │ - Session Data  │
+│ - Background Jobs│    │ - Orders        │    │ - API Responses │
+│ - WebSocket     │    │ - Products      │    │ - Rate Limits   │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                        │                        │
+         └────────────────────────┼────────────────────────┘
+                                  ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  External       │    │   Message       │    │   File Storage  │
+│  Services       │    │   Queue         │    │   (S3/Cloud)    │
+│                 │    │   (RabbitMQ)    │    │                 │
+│ - Stripe API    │◄──►│ - Email Notifications│◄►│ - User Uploads │
+│ - Email Service │    │ - Background Tasks │  │ - Product Images│
+│ - Analytics     │    │ - Order Processing │  │ - Documents    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## Detailed Component Architecture
+
+### Application Layer
+
+```
+FastAPI Application
+├── Routes/Controllers
+│   ├── auth.py - Authentication endpoints
+│   ├── users.py - User management
+│   ├── products.py - Product catalog
+│   ├── orders.py - Order processing
+│   ├── payments.py - Payment handling
+│   └── webhooks.py - External service callbacks
+├── Services
+│   ├── UserAuthenticationService
+│   │   ├── Password hashing/verification
+│   │   ├── JWT token management
+│   │   └── User session handling
+│   ├── PaymentService
+│   │   ├── Stripe integration
+│   │   ├── Payment intent creation
+│   │   └── Refund processing
+│   └── OrderService
+│       ├── Order creation/validation
+│       ├── Inventory management
+│       └── Order status updates
+├── Models
+│   ├── User - User accounts
+│   ├── Product - Product catalog
+│   ├── Order - Customer orders
+│   ├── Payment - Payment transactions
+│   └── Cart - Shopping cart items
+├── Database Layer
+│   ├── SQLAlchemy ORM
+│   ├── Connection pooling
+│   └── Migration management (Alembic)
+└── Middleware
+    ├── Authentication middleware
+    ├── CORS handling
+    ├── Request logging
+    └── Error handling
+```
+
+### Data Flow
+
+#### User Registration Flow
+```
+1. Client → POST /auth/register
+2. Auth Route → UserAuthenticationService.register_user()
+3. Service → Database (create user record)
+4. Service → Generate JWT token
+5. Response → Client (token + user data)
+```
+
+#### Order Creation Flow
+```
+1. Client → POST /orders (authenticated)
+2. Order Route → Validate user authentication
+3. Route → OrderService.create_order()
+4. Service → Validate cart items
+5. Service → Check inventory
+6. Service → Calculate total
+7. Service → Database (create order record)
+8. Service → PaymentService.create_payment_intent()
+9. Payment Service → Stripe API
+10. Response → Client (order + payment intent)
+```
+
+#### Payment Confirmation Flow
+```
+1. Stripe → Webhook /webhooks/stripe
+2. Webhook Handler → Validate webhook signature
+3. Handler → PaymentService.confirm_payment()
+4. Service → Update payment status in DB
+5. Service → Update order status
+6. Service → Send confirmation email (async)
+7. Response → Stripe (200 OK)
+```
+
+### Database Schema
+
+```
+Users
+├── id (PK)
+├── email (unique)
+├── hashed_password
+├── full_name
+├── created_at
+└── updated_at
+
+Products
+├── id (PK)
+├── name
+├── description
+├── price
+├── inventory_count
+├── category
+└── created_at
+
+Orders
+├── id (PK)
+├── user_id (FK → Users)
+├── total_amount
+├── status (pending/paid/shipped/delivered/cancelled)
+├── shipping_address
+├── created_at
+└── updated_at
+
+Order_Items
+├── id (PK)
+├── order_id (FK → Orders)
+├── product_id (FK → Products)
+├── quantity
+├── unit_price
+└── total_price
+
+Payments
+├── id (PK)
+├── order_id (FK → Orders)
+├── amount
+├── payment_method (stripe/paypal/etc)
+├── transaction_id (external)
+├── status (pending/completed/failed/refunded)
+└── created_at
+
+Carts
+├── id (PK)
+├── user_id (FK → Users)
+├── product_id (FK → Products)
+├── quantity
+└── added_at
+```
+
+### Security Architecture
+
+```
+Authentication & Authorization
+├── JWT Token-based auth
+├── Password hashing (bcrypt)
+├── Role-based access control
+├── API key authentication (for third-party)
+└── Rate limiting (Redis-based)
+
+Data Protection
+├── Input validation (Pydantic)
+├── SQL injection prevention (ORM)
+├── XSS protection (FastAPI)
+├── CSRF protection (as needed)
+└── HTTPS enforcement
+
+Infrastructure Security
+├── Network segmentation
+├── Firewall rules
+├── SSL/TLS encryption
+├── Regular security updates
+└── Monitoring & logging
+```
+
+### Scalability Considerations
+
+```
+Horizontal Scaling
+├── Stateless application servers
+├── Database read replicas
+├── Redis cluster for caching
+└── Load balancer distribution
+
+Performance Optimization
+├── Database connection pooling
+├── Query optimization & indexing
+├── Caching strategies (Redis)
+├── CDN for static assets
+└── Background job processing
+
+Monitoring & Observability
+├── Application metrics (Prometheus)
+├── Error tracking (Sentry)
+├── Performance monitoring
+├── Log aggregation (ELK stack)
+└── Health check endpoints
+```
+
+### Deployment Architecture
+
+```
+Production Environment
+├── Load Balancer (Nginx/HAProxy)
+├── Application Servers (Docker/Kubernetes)
+├── Database (RDS/Managed PostgreSQL)
+├── Cache (Elasticache/Managed Redis)
+├── File Storage (S3/Cloud Storage)
+├── Message Queue (SQS/RabbitMQ)
+└── Monitoring (CloudWatch/Datadog)
+
+CI/CD Pipeline
+├── Code Repository (GitHub/GitLab)
+├── CI Server (GitHub Actions/Jenkins)
+├── Automated Testing
+├── Container Build
+├── Deployment to Staging
+├── Integration Testing
+└── Production Deployment
+```
+
+This architecture provides a scalable, secure, and maintainable foundation for an e-commerce platform with clear separation of concerns and robust error handling.

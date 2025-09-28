@@ -1,0 +1,45 @@
+Compliance Regulations
+
+GDPR Compliance
+
+Data Retention
+Personal data retained only as long as necessary for purposes. Maximum retention periods:
+- Customer data: 7 years after last interaction
+- Marketing data: 2 years or until opt-out
+- Log data: 1 year
+
+Data Subject Rights
+- Right to access: Provide data copy within 30 days
+- Right to rectification: Correct inaccurate data
+- Right to erasure: Delete data upon request, unless legal obligation
+- Right to data portability: Export data in machine-readable format
+
+Data Processing
+- Lawful basis: Consent, contract, legitimate interest
+- Data minimization: Collect only necessary data
+- Purpose limitation: Use data only for specified purposes
+
+Security Measures
+- Encryption at rest and in transit
+- Access controls and audits
+- Incident response plan
+
+Breach Notification
+Notify supervisory authority within 72 hours of breach.
+
+CCPA Compliance
+
+Data Retention
+Similar to GDPR, retain for business purposes only.
+
+Consumer Rights
+- Right to know: Categories of data collected
+- Right to delete: Delete personal information
+- Right to opt-out: No sale of personal data
+
+Implementation
+- Privacy notices updated annually
+- Data processing agreements with vendors
+- Regular compliance audits
+
+Contact DPO: dpo@salespro.com

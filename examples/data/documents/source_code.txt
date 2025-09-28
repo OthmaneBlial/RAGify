@@ -1,0 +1,344 @@
+# Source Code Snippets
+
+## Database Connection Logic
+
+### database.py
+```python
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import StaticPool
+
+# Database configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+
+# Create engine
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    poolclass=StaticPool if "sqlite" in DATABASE_URL else None,
+    echo=True  # Set to False in production
+)
+
+# Create SessionLocal class
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Create Base class
+Base = declarative_base()
+
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+### models.py
+```python
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from .database import Base
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    full_name = Column(String)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    orders = relationship("Order", back_populates="user")
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    total_amount = Column(Float)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    user = relationship("User", back_populates="orders")
+    payments = relationship("Payment", back_populates="order")
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    amount = Column(Float)
+    payment_method = Column(String)
+    transaction_id = Column(String, unique=True)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    order = relationship("Order", back_populates="payments")
+```
+
+## UserAuthenticationService Class
+
+### services/auth_service.py
+```python
+from datetime import datetime, timedelta
+from typing import Optional
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+from ..models import User
+from ..config import settings
+
+class UserAuthenticationService:
+    """
+    Service class for handling user authentication, including password hashing,
+    JWT token generation and validation, and user verification.
+    """
+
+    def __init__(self):
+        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        self.secret_key = settings.SECRET_KEY
+        self.algorithm = settings.ALGORITHM
+        self.access_token_expire_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Verify a password against its hash."""
+        return self.pwd_context.verify(plain_password, hashed_password)
+
+    def get_password_hash(self, password: str) -> str:
+        """Hash a password for storing."""
+        return self.pwd_context.hash(password)
+
+    def authenticate_user(self, db: Session, email: str, password: str) -> Optional[User]:
+        """Authenticate a user with email and password."""
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            return None
+        if not self.verify_password(password, user.hashed_password):
+            return None
+        return user
+
+    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None):
+        """Create a JWT access token."""
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+        return encoded_jwt
+
+    def get_current_user(self, token: str, db: Session) -> Optional[User]:
+        """Get the current user from a JWT token."""
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        try:
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            email: str = payload.get("sub")
+            if email is None:
+                raise credentials_exception
+        except JWTError:
+            raise credentials_exception
+
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            raise credentials_exception
+        return user
+
+    def register_user(self, db: Session, email: str, password: str, full_name: str) -> User:
+        """Register a new user."""
+        hashed_password = self.get_password_hash(password)
+        db_user = User(email=email, hashed_password=hashed_password, full_name=full_name)
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        return db_user
+```
+
+## Payment Processing Files
+
+### payment_service.py
+```python
+import stripe
+from sqlalchemy.orm import Session
+from ..models import Payment, Order
+from ..config import settings
+
+class PaymentService:
+    """Service for handling payment processing using Stripe."""
+
+    def __init__(self):
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+
+    def create_payment_intent(self, order: Order) -> dict:
+        """Create a Stripe payment intent for an order."""
+        try:
+            intent = stripe.PaymentIntent.create(
+                amount=int(order.total_amount * 100),  # Convert to cents
+                currency='usd',
+                metadata={'order_id': order.id}
+            )
+            return {
+                'client_secret': intent.client_secret,
+                'payment_intent_id': intent.id
+            }
+        except Exception as e:
+            raise Exception(f"Failed to create payment intent: {str(e)}")
+
+    def confirm_payment(self, db: Session, payment_intent_id: str, order_id: int):
+        """Confirm a payment and update the database."""
+        try:
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            if intent.status == 'succeeded':
+                # Create payment record
+                payment = Payment(
+                    order_id=order_id,
+                    amount=intent.amount / 100,  # Convert from cents
+                    payment_method='stripe',
+                    transaction_id=payment_intent_id,
+                    status='completed'
+                )
+                db.add(payment)
+
+                # Update order status
+                order = db.query(Order).filter(Order.id == order_id).first()
+                order.status = 'paid'
+
+                db.commit()
+                return True
+            else:
+                return False
+        except Exception as e:
+            db.rollback()
+            raise Exception(f"Failed to confirm payment: {str(e)}")
+
+    def process_refund(self, db: Session, payment: Payment, amount: float = None):
+        """Process a refund for a payment."""
+        try:
+            refund_amount = int((amount or payment.amount) * 100)
+            refund = stripe.Refund.create(
+                payment_intent=payment.transaction_id,
+                amount=refund_amount
+            )
+
+            # Update payment status
+            payment.status = 'refunded'
+            db.commit()
+
+            return refund
+        except Exception as e:
+            db.rollback()
+            raise Exception(f"Failed to process refund: {str(e)}")
+```
+
+### payment_routes.py
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..models import Order
+from ..services.payment_service import PaymentService
+from ..auth import get_current_user
+
+router = APIRouter()
+
+@router.post("/orders/{order_id}/payment-intent")
+async def create_payment_intent(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Create a payment intent for an order."""
+    order = db.query(Order).filter(Order.id == order_id, Order.user_id == current_user.id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    payment_service = PaymentService()
+    try:
+        result = payment_service.create_payment_intent(order)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/payments/confirm")
+async def confirm_payment(
+    payment_intent_id: str,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """Confirm a payment."""
+    payment_service = PaymentService()
+    try:
+        success = payment_service.confirm_payment(db, payment_intent_id, order_id)
+        if success:
+            return {"message": "Payment confirmed successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Payment confirmation failed")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+```
+
+### webhook_handler.py
+```python
+import json
+from fastapi import Request, HTTPException
+from sqlalchemy.orm import Session
+import stripe
+from ..database import get_db
+from ..services.payment_service import PaymentService
+from ..config import settings
+
+async def handle_stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    """Handle Stripe webhook events."""
+    payload = await request.body()
+    sig_header = request.headers.get('stripe-signature')
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    # Handle the event
+    if event.type == 'payment_intent.succeeded':
+        payment_intent = event.data.object
+        order_id = payment_intent.metadata.get('order_id')
+        if order_id:
+            payment_service = PaymentService()
+            payment_service.confirm_payment(db, payment_intent.id, int(order_id))
+
+    return {"status": "success"}
+```
+
+## Configuration
+
+### config.py
+```python
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Settings:
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key")
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY")
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+settings = Settings()

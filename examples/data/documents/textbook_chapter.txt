@@ -1,0 +1,70 @@
+Chapter 7: Photosynthesis and Cellular Respiration
+
+Introduction to Photosynthesis:
+Photosynthesis is the process by which green plants, algae, and some bacteria convert light energy into chemical energy stored in glucose. This fundamental biological process sustains life on Earth by producing oxygen and serving as the base of most food chains. The word "photosynthesis" comes from the Greek words "photo" (light) and "synthesis" (putting together), accurately describing how plants use light to synthesize organic compounds.
+
+The overall equation for photosynthesis is:
+6CO₂ + 6H₂O + light energy → C₆H₁₂O₆ + 6O₂
+
+This deceptively simple equation represents a complex series of reactions occurring in two main stages: the light-dependent reactions and the light-independent reactions (Calvin cycle).
+
+Light-Dependent Reactions:
+The light-dependent reactions occur in the thylakoid membranes of chloroplasts. These reactions capture light energy and use it to produce ATP and NADPH, which are energy-rich molecules used in the next stage.
+
+Key components of the light-dependent reactions:
+1. Photosystems: Protein complexes containing chlorophyll and other pigments that absorb light energy.
+2. Electron transport chain: A series of protein complexes that pass electrons, creating a proton gradient.
+3. ATP synthase: An enzyme that uses the proton gradient to produce ATP.
+
+There are two types of photosystems: Photosystem II (PSII) and Photosystem I (PSI). PSII absorbs light around 680 nm (red light) and initiates the electron transport chain. PSI absorbs light around 700 nm and produces NADPH.
+
+The light-dependent reactions can be summarized as:
+2H₂O + 2NADP⁺ + 8 photons → O₂ + 2NADPH + 2H⁺ + 3ATP
+
+Light-Independent Reactions (Calvin Cycle):
+The Calvin cycle, also known as the light-independent reactions or dark reactions, occurs in the stroma of the chloroplast. This cycle uses the ATP and NADPH produced in the light-dependent reactions to convert carbon dioxide into glucose.
+
+The Calvin cycle consists of three main phases:
+1. Carbon fixation: CO₂ is incorporated into an organic molecule.
+2. Reduction: The fixed carbon is reduced to form sugars.
+3. Regeneration: RuBP is regenerated to continue the cycle.
+
+The key enzyme in carbon fixation is RuBisCO (ribulose-1,5-bisphosphate carboxylase/oxygenase), which catalyzes the addition of CO₂ to RuBP. This enzyme is considered the most abundant protein on Earth.
+
+For every three turns of the Calvin cycle, one molecule of G3P (glyceraldehyde-3-phosphate) is produced, which can be used to make glucose and other carbohydrates.
+
+Factors Affecting Photosynthesis:
+Several environmental factors influence the rate of photosynthesis:
+- Light intensity: Rate increases with light intensity until saturation.
+- Carbon dioxide concentration: Higher CO₂ levels generally increase photosynthetic rate.
+- Temperature: Optimal temperature varies by species, typically 20-30°C.
+- Water availability: Water stress can limit photosynthesis by closing stomata.
+
+C4 and CAM Photosynthesis:
+While most plants use C3 photosynthesis (so named because the first stable product is a 3-carbon compound), some plants have evolved specialized pathways to maximize photosynthetic efficiency.
+
+C4 plants, such as corn and sugarcane, use a two-cell system to concentrate CO₂ around RuBisCO, reducing photorespiration. The process involves:
+1. Initial fixation of CO₂ into a 4-carbon compound in mesophyll cells.
+2. Transport to bundle sheath cells where CO₂ is released and enters the Calvin cycle.
+
+CAM (Crassulacean Acid Metabolism) plants, such as cacti and pineapples, open their stomata at night to minimize water loss. CO₂ is stored as organic acids and released during the day for photosynthesis.
+
+Photosynthesis and Climate Change:
+As atmospheric CO₂ levels rise due to human activities, photosynthesis rates may increase, potentially leading to enhanced plant growth. However, this "CO₂ fertilization effect" may be limited by other factors such as nutrient availability and temperature changes.
+
+Understanding photosynthesis is crucial for addressing global challenges including food security, biofuel production, and climate change mitigation. Advances in our knowledge of photosynthetic mechanisms continue to inform agricultural and environmental strategies.
+
+Key Terms:
+- Chloroplast: Organelle where photosynthesis occurs
+- Chlorophyll: Green pigment that absorbs light energy
+- Stroma: Fluid-filled space in chloroplasts where the Calvin cycle occurs
+- Thylakoid: Membrane-bound structure containing photosystems
+- Photorespiration: Process that reduces photosynthetic efficiency in C3 plants
+- RuBisCO: Enzyme responsible for carbon fixation
+
+Review Questions:
+1. What is the overall purpose of photosynthesis?
+2. Describe the two main stages of photosynthesis and where they occur.
+3. What role do photosystems play in the light-dependent reactions?
+4. How does the Calvin cycle differ from the light-dependent reactions?
+5. Compare C3, C4, and CAM photosynthesis.

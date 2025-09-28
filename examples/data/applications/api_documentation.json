@@ -1,0 +1,26 @@
+{
+  "knowledge_base": "api_documentation_knowledge_base",
+  "documents": [
+    {
+      "title": "API Reference",
+      "filename": "api_reference.txt"
+    },
+    {
+      "title": "SDK Guides",
+      "filename": "sdk_guides.txt"
+    },
+    {
+      "title": "Code Examples",
+      "filename": "code_examples.txt"
+    }
+  ],
+  "application_details": {
+    "name": "API Documentation Assistant",
+    "description": "An AI assistant to help developers understand and use APIs and SDKs.",
+    "sample_questions": [
+      "How do I authenticate to the /users endpoint?",
+      "Show me a Python example for the create_widget function.",
+      "What are the API rate limits?"
+    ]
+  }
+}
