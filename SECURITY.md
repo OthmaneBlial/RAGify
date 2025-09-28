@@ -17,11 +17,7 @@ If you discover a security vulnerability in RAGify, please help us by reporting 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report security vulnerabilities by emailing our security team at:
-
-**security@ragify.dev**
-
-Alternatively, you can use GitHub's private vulnerability reporting feature:
+Instead, please report security vulnerabilities using GitHub's private vulnerability reporting feature:
 
 1. Go to the [Security tab](https://github.com/OthmaneBlial/RAGify/security) in this repository
 2. Click "Report a vulnerability"
