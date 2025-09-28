@@ -1,0 +1,35 @@
+Troubleshooting Guide
+
+Common Issues and Solutions
+
+1. Device Not Powering On
+- Check power adapter and outlet
+- Try different cable
+- Reset by holding power button for 10 seconds
+
+2. Wi-Fi Connection Problems
+- Verify network credentials
+- Ensure device is within range
+- Restart router and device
+
+3. App Not Responding
+- Force close and reopen app
+- Clear app cache
+- Update to latest version
+
+4. Voice Commands Not Working
+- Check microphone permissions
+- Ensure internet connection
+- Re-link voice assistant
+
+5. Firmware Update Failed
+- Ensure stable internet
+- Restart device during update
+- Contact support if persists
+
+6. Password Reset Issues
+- Check spam folder for reset email
+- Use correct email address
+- Contact support for manual reset
+
+If issues persist, gather device info and contact support@smarthome.com.

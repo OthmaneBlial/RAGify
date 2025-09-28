@@ -1,0 +1,33 @@
+Product Manual - SmartHome Hub
+
+Overview
+
+The SmartHome Hub connects all your smart devices for seamless control.
+
+Features
+- Voice control with Alexa integration
+- App-based management
+- Energy monitoring
+
+Setup
+1. Plug in the hub
+2. Download the app
+3. Follow on-screen instructions
+
+Troubleshooting
+- If device not responding: Restart hub and check Wi-Fi
+- App issues: Clear cache or reinstall app
+
+Password Reset
+- Go to account settings in app
+- Select 'Forgot Password'
+- Follow email instructions
+
+Return Policy
+- Returns within 30 days for defective items
+- Contact support@smarthome.com
+- Refunds processed within 7 business days
+
+Contact Support
+Email: support@smarthome.com
+Phone: 1-800-123-4567

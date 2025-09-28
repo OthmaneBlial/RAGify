@@ -1,0 +1,25 @@
+{
+  "knowledge_base": "legal_analysis_knowledge_base",
+  "documents": [
+    {
+      "title": "Service Agreements",
+      "filename": "service_agreements.txt"
+    },
+    {
+      "title": "Terms of Service",
+      "filename": "terms_of_service.txt"
+    },
+    {
+      "title": "Compliance Regulations",
+      "filename": "compliance_regulations.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Legal Document Analysis",
+    "description": "An AI tool for analyzing legal documents, contracts, and compliance requirements.",
+    "sample_questions": [
+      "What are the termination clauses?",
+      "How is GDPR data retention handled?"
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "knowledge_base": "customer_support_knowledge_base",
+  "documents": [
+    {
+      "title": "Product Manual",
+      "filename": "product_manual.txt"
+    },
+    {
+      "title": "FAQ",
+      "filename": "faq.txt"
+    },
+    {
+      "title": "Troubleshooting Guide",
+      "filename": "troubleshooting_guide.txt"
+    },
+    {
+      "title": "API Documentation",
+      "filename": "api_documentation.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Customer Support Bot",
+    "description": "An AI bot to assist customers with product inquiries, troubleshooting, and support.",
+    "sample_questions": [
+      "How do I troubleshoot my device?",
+      "How do I reset my password?",
+      "What is the return policy?"
+    ]
+  }
+}

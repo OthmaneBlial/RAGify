@@ -1,0 +1,29 @@
+Product Specifications - SalesPro CRM
+
+Overview
+SalesPro CRM is a cloud-based customer relationship management platform designed for small to medium businesses.
+
+Key Features
+- Contact management with 360-degree views
+- Sales pipeline tracking
+- Automated email campaigns
+- Integration with popular tools (Gmail, Outlook, Slack)
+- Mobile app for iOS and Android
+
+Technical Specs
+- Cloud-hosted: AWS infrastructure
+- Security: SOC 2 compliant, end-to-end encryption
+- Scalability: Supports up to 10,000 users
+- API: RESTful API for custom integrations
+- Data storage: Unlimited contacts, 100GB per user
+
+Pricing Tiers
+- Starter: $29/user/month
+- Professional: $59/user/month
+- Enterprise: Custom pricing
+
+Compatibility
+- Browsers: Chrome, Firefox, Safari, Edge
+- Operating Systems: Windows, macOS, Linux
+
+Warranty: 99.9% uptime SLA
