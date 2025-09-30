@@ -198,7 +198,19 @@
     </div>
 
     <script>
-        const API_BASE = 'http://localhost:8000';
+        function resolveApiBase() {
+            const { protocol, hostname, port } = window.location;
+            const portMapping = new Map([
+                ['5173', '8000'],
+                ['15173', '18000'],
+                ['', '8000'],
+                ['80', '18000'],
+            ]);
+            const targetPort = portMapping.get(port) || port || '8000';
+            return `${protocol}//${hostname}:${targetPort}`;
+        }
+
+        const API_BASE = resolveApiBase();
         let currentApplicationId = null;
         let currentModelInfo = null;
 

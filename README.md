@@ -61,6 +61,32 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 # Frontend: http://localhost:5173 (after cd frontend && npm run dev)
 ```
 
+## 🐳 Docker Quick Start
+
+Prefer containers? The repository now ships with a full Docker setup for the API, frontend, PostgreSQL (with pgvector), and Redis.
+
+```bash
+# Build (or rebuild) the base dependency image and start everything
+./startupdocker.sh --build
+
+# Stream logs if you want to watch startup
+./startupdocker.sh --build --logs
+
+# Stop the stack when you're done
+./startupdocker.sh --down
+```
+
+Host ports for the Docker stack:
+
+- Backend API: `http://localhost:18000`
+- Frontend UI: `http://localhost:15173`
+- PostgreSQL: `localhost:15432` (user/password: `ragify` / `RagifyStrongPass2023`)
+- Redis: `localhost:16379`
+
+The script automatically maintains a `ragify-backend-base` image that contains all heavy Python dependencies (Torch, transformers, etc.). The first `--build` run prepares that base; subsequent builds reuse it so only your application code is rebuilt unless `requirements-docker.txt` changes.
+
+Environment variables are loaded from the project’s `.env` file, so edit that file if you need to change keys, database credentials, or model configuration before running `./startupdocker.sh`.
+
 ## 🎯 Why RAGify?
 
 **Traditional AI chatbots often hallucinate** - they make up information that sounds plausible but isn't accurate. RAGify eliminates this by:
@@ -110,4 +136,3 @@ black . && isort .
 # Start development server
 uvicorn backend.main:app --reload
 ```
-

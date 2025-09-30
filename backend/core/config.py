@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Vector
     vector_dimension: int = 384  # Must match SentenceTransformer dimension
 
+    # Caching / message bus
+    redis_url: Optional[str] = None
+
     # Model Provider API Keys
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
