@@ -135,59 +135,63 @@
         }
     </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
     <!-- Navigation -->
-    <nav class="bg-white shadow-lg">
+    <nav class="bg-white/90 backdrop-blur border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
+            <div class="flex justify-between items-center h-20">
                 <div class="flex items-center">
-                    <a href="/" class="text-2xl font-bold text-gray-900">RAGify</a>
+                    <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Home</a>
-                    <a href="/chat.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Chat</a>
-                    <a href="/knowledge.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Knowledge Base</a>
-                    <a href="/settings.html" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium">Settings</a>
+                <div class="flex items-center space-x-2">
+                    <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
+                    <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
+                    <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
+                    <a href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
                 </div>
             </div>
         </div>
     </nav>
 
     <!-- Chat Interface -->
-    <div class="max-w-4xl mx-auto px-4 py-8">
-        <div class="bg-white rounded-lg shadow-lg h-[600px] flex flex-col">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="bg-white/90 backdrop-blur-sm border border-blue-100 rounded-3xl shadow-2xl h-[650px] lg:h-[720px] flex flex-col overflow-hidden">
             <!-- Chat Header -->
-            <div class="bg-blue-600 text-white p-4 rounded-t-lg">
-                <h1 class="text-xl font-semibold">Chat with Your Documents</h1>
-                <p class="text-blue-100 text-sm" id="chatSubtitle">Ask questions about your uploaded documents</p>
+            <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white px-6 md:px-8 py-6 rounded-t-3xl">
+                <h1 class="text-3xl md:text-4xl font-semibold tracking-tight">Chat with Your Documents</h1>
+                <p class="text-indigo-100/90 text-base md:text-lg mt-2" id="chatSubtitle">Ask questions about your uploaded documents</p>
             </div>
 
             <!-- Messages Container -->
-            <div id="messages" class="flex-1 p-4 overflow-y-auto space-y-4">
+            <div id="messages" class="flex-1 p-6 md:p-8 overflow-y-auto space-y-4 bg-white/70">
                 <div class="chat-bubble assistant">
                     <p id="welcomeMessage">Hello! I'm your AI assistant. Upload some documents first, then ask me questions about them!</p>
                 </div>
             </div>
 
             <!-- Input Area -->
-            <div class="border-t p-4">
-                <div class="flex space-x-2">
+            <div class="border-t border-slate-100 bg-slate-50/80 p-4 md:p-6 rounded-b-3xl">
+                <div class="flex flex-col md:flex-row md:space-x-3 space-y-3 md:space-y-0">
                     <input
                         type="text"
                         id="messageInput"
                         placeholder="Ask a question about your documents..."
-                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        class="flex-1 px-4 py-3 border border-gray-300/80 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition"
                         onkeypress="handleKeyPress(event)"
                     >
                     <button
                         onclick="sendMessage()"
-                        class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition duration-200"
+                        class="bg-blue-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-blue-700 transition duration-200 shadow-sm"
                     >
                         Send
                     </button>
                 </div>
-                <div class="mt-2 text-sm text-gray-500">
+                <div class="mt-3 text-sm text-slate-500 flex items-center justify-between">
                     <span id="status">Ready to chat</span>
+                    <span class="hidden md:inline-flex items-center gap-2 text-xs text-slate-400">
+                        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                        Live session
+                    </span>
                 </div>
             </div>
         </div>
