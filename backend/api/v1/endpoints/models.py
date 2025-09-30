@@ -1,7 +1,8 @@
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 
 from backend.core.database import get_db
 from backend.modules.models.model_manager import model_manager
@@ -12,6 +13,11 @@ from shared.models.Model import (
     TestConnectionRequest,
     TestConnectionResponse,
 )
+
+
+class SetCurrentModelRequest(BaseModel):
+    model_name: str
+    provider: str = "openrouter"
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +125,105 @@ async def estimate_cost(tokens_used: int, model_name: str, provider: ProviderTyp
     except Exception as e:
         logger.error(f"Error estimating cost: {e}")
         raise HTTPException(status_code=500, detail="Cost estimation failed")
+
+
+@router.get("/current")
+async def get_current_model(db: AsyncSession = Depends(get_db)):
+    """
+    Get the current selected model from the default application.
+
+    Returns:
+        Current model configuration
+    """
+    try:
+        from backend.modules.applications.crud import list_applications, get_application_with_config
+        from uuid import UUID
+
+        applications = await list_applications(db)
+
+        # Find default application
+        default_app = next(
+            (
+                app
+                for app in applications
+                if app["name"] == "Default Chat Application"
+            ),
+            None,
+        )
+
+        if not default_app:
+            return {"model_name": None, "provider": None}
+
+        # Get application config
+        app_config = await get_application_with_config(db, UUID(default_app["id"]))
+        if not app_config or not app_config.get("config", {}).get("model_config"):
+            return {"model_name": None, "provider": None}
+
+        model_config = app_config["config"]["model_config"]
+        return {
+            "model_name": model_config.get("model", model_config.get("model_name")),
+            "provider": model_config.get("provider")
+        }
+    except Exception as e:
+        logger.error(f"Error getting current model: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get current model")
+
+
+@router.post("/current")
+async def set_current_model(
+    request: SetCurrentModelRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Set the current model for the default application.
+
+    Args:
+        model_name: Name of the model
+        provider: Provider name
+
+    Returns:
+        Success message
+    """
+    try:
+        from backend.modules.applications.crud import list_applications, update_application
+        from uuid import UUID
+
+        applications = await list_applications(db)
+
+        # Find or create default application
+        default_app = next(
+            (
+                app
+                for app in applications
+                if app["name"] == "Default Chat Application"
+            ),
+            None,
+        )
+
+        if not default_app:
+            # Create default application if it doesn't exist
+            from backend.modules.applications.crud import create_application
+            default_app = await create_application(
+                db=db,
+                name="Default Chat Application",
+                description="Default application for chat functionality",
+                config={"provider": request.provider, "model": request.model_name},
+                knowledge_base_ids=[],
+            )
+            app_id = default_app.id
+        else:
+            app_id = UUID(default_app["id"])
+            # Update existing application
+            await update_application(
+                db=db,
+                application_id=app_id,
+                config={"provider": request.provider, "model": request.model_name}
+            )
+
+        return {"message": "Current model updated successfully"}
+    except Exception as e:
+        logger.error(f"Error setting current model: {e}")
+        raise HTTPException(status_code=500, detail="Failed to set current model")
 
 
 @router.get("/providers")

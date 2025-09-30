@@ -160,16 +160,25 @@
 
         async function loadCurrentSettings() {
             try {
-                // For now, we'll use localStorage to persist the selection
-                // In a real app, this would come from the backend
-                const savedModel = localStorage.getItem('selectedModel');
-                if (savedModel) {
-                    document.getElementById('modelSelect').value = savedModel;
-                    updateModelInfo(savedModel);
-                    document.getElementById('currentModel').textContent = savedModel;
+                const response = await fetch(`${API_BASE}/api/v1/models/current`);
+                if (response.ok) {
+                    const currentModel = await response.json();
+                    if (currentModel.model_name) {
+                        document.getElementById('modelSelect').value = currentModel.model_name;
+                        updateModelInfo(currentModel.model_name);
+                        document.getElementById('currentModel').textContent = currentModel.model_name;
+                        currentSelectedModel = currentModel.model_name;
+                    } else {
+                        document.getElementById('currentModel').textContent = 'No model selected';
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.error('Failed to load current model:', response.status, errorText);
+                    document.getElementById('currentModel').textContent = 'No model selected';
                 }
             } catch (error) {
                 console.error('Error loading settings:', error);
+                document.getElementById('currentModel').textContent = 'No model selected';
             }
         }
 
@@ -189,7 +198,7 @@
             }
         }
 
-        function saveSettings() {
+        async function saveSettings() {
             const select = document.getElementById('modelSelect');
             const selectedModel = select.value;
 
@@ -199,11 +208,28 @@
             }
 
             try {
-                // Save to localStorage for now
-                localStorage.setItem('selectedModel', selectedModel);
-                document.getElementById('currentModel').textContent = selectedModel;
-                showStatus('Settings saved successfully!', 'success');
+                const response = await fetch(`${API_BASE}/api/v1/models/current`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        'model_name': selectedModel,
+                        'provider': 'openrouter'
+                    })
+                });
+
+                if (response.ok) {
+                    document.getElementById('currentModel').textContent = selectedModel;
+                    currentSelectedModel = selectedModel;
+                    showStatus('Settings saved successfully!', 'success');
+                } else {
+                    const errorText = await response.text();
+                    console.error('Save failed:', response.status, errorText);
+                    showStatus(`Failed to save settings: ${response.status}`, 'error');
+                }
             } catch (error) {
+                console.error('Error saving settings:', error);
                 showStatus('Failed to save settings', 'error');
             }
         }
