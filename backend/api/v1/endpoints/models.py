@@ -36,7 +36,7 @@ async def list_available_models(provider: Optional[ProviderType] = None):
         List of available models with metadata
     """
     try:
-        models = model_manager.get_available_models(provider)
+        models = await model_manager.get_available_models(provider)
         return models
     except Exception as e:
         logger.error(f"Error listing models: {e}")
@@ -159,10 +159,41 @@ async def get_current_model(db: AsyncSession = Depends(get_db)):
         if not app_config or not app_config.get("config", {}).get("model_config"):
             return {"model_name": None, "provider": None}
 
-        model_config = app_config["config"]["model_config"]
+        model_config = app_config["config"].get("model_config", {})
+        model_name = model_config.get("model", model_config.get("model_name"))
+        provider = model_config.get("provider")
+
+        display_name = None
+        is_free = None
+
+        if model_name and provider:
+            try:
+                provider_enum = ProviderType(provider)
+            except ValueError:
+                provider_enum = None
+
+            if provider_enum:
+                try:
+                    available_models = await model_manager.get_available_models(
+                        provider_enum
+                    )
+                    match = next(
+                        (m for m in available_models if m.get("name") == model_name),
+                        None,
+                    )
+                    if match:
+                        display_name = match.get("display_name")
+                        is_free = match.get("is_free")
+                except Exception as lookup_error:
+                    logger.debug(
+                        "Failed to enrich current model metadata: %s", lookup_error
+                    )
+
         return {
-            "model_name": model_config.get("model", model_config.get("model_name")),
-            "provider": model_config.get("provider")
+            "model_name": model_name,
+            "provider": provider,
+            "display_name": display_name,
+            "is_free": is_free,
         }
     except Exception as e:
         logger.error(f"Error getting current model: {e}")

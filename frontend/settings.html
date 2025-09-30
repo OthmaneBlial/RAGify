@@ -37,10 +37,26 @@
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Model</label>
-                        <select id="modelSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label for="modelSearch" class="block text-sm font-medium text-gray-700 mb-2">Search Models</label>
+                        <input
+                            id="modelSearch"
+                            type="text"
+                            placeholder="Search by name, provider, or description"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p id="modelSummary" class="text-xs text-gray-500 mt-2">Loading available models...</p>
+                    </div>
+
+                    <div>
+                        <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-2">Select Model</label>
+                        <select
+                            id="modelSelect"
+                            size="10"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
                             <option value="">Loading models...</option>
                         </select>
+                        <p class="text-xs text-gray-500 mt-2">Free models are marked with 🆓 and appear at the top. Use the search above to quickly filter the list.</p>
                     </div>
 
                     <div class="bg-blue-50 p-4 rounded-md">
@@ -55,7 +71,7 @@
                             <h3 class="font-medium text-gray-900">Current Selection</h3>
                             <p id="currentModel" class="text-sm text-gray-600">No model selected</p>
                         </div>
-                        <button id="saveButton" onclick="saveSettings()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <button id="saveButton" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed">
                             Save Settings
                         </button>
                     </div>
@@ -74,7 +90,7 @@
                         </div>
                         <div class="ml-3">
                             <h3 id="statusTitle" class="text-sm font-medium">Checking API Status...</h3>
-                            <p id="statusMessage" class="text-sm mt-1">
+                            <p id="statusDetails" class="text-sm mt-1">
                                 Verifying OpenRouter API key configuration.
                             </p>
                         </div>
@@ -83,7 +99,7 @@
             </div>
 
             <!-- Status Messages -->
-            <div id="statusMessage" class="hidden p-4 rounded-md mb-4">
+            <div id="statusAlert" class="hidden p-4 rounded-md mb-4">
                 <p id="statusText" class="text-sm"></p>
             </div>
         </div>
@@ -91,179 +107,421 @@
 
     <script>
         const API_BASE = 'http://localhost:8000';
-        let availableModels = [];
-        let currentSelectedModel = null;
+        const OPENROUTER_PROVIDER = 'openrouter';
 
-        async function loadModels() {
-            try {
-                const response = await fetch(`${API_BASE}/api/v1/models/`);
-                if (response.ok) {
-                    const models = await response.json();
-                    availableModels = models;
-                    populateModelSelect(models);
-                    updateApiStatus(true, 'API key is configured and working correctly.');
-                } else {
-                    updateApiStatus(false, 'Failed to connect to API. Please check your OpenRouter API key configuration.');
-                    showStatus('Failed to load models', 'error');
-                }
-            } catch (error) {
-                console.error('Error loading models:', error);
-                updateApiStatus(false, 'Network error. Please check your connection and API key.');
-                showStatus('Network error while loading models', 'error');
+        let allModels = [];
+        let filteredModels = [];
+        let currentSelectedModel = null;
+        let persistedModelName = null;
+        let statusTimeoutHandle = null;
+
+        function escapeHtml(value) {
+            if (value === undefined || value === null) {
+                return '';
             }
+
+            return value
+                .toString()
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatPrice(value) {
+            if (value === undefined || value === null || value === '') {
+                return 'Unavailable';
+            }
+
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) {
+                return value.toString();
+            }
+
+            if (numeric === 0) {
+                return 'Free';
+            }
+
+            const formatted = numeric < 0.01 ? numeric.toFixed(4) : numeric.toFixed(3);
+            return `$${parseFloat(formatted)} / 1K tokens`;
+        }
+
+        function sortModels(models) {
+            models.sort((a, b) => {
+                if (a.is_free !== b.is_free) {
+                    return a.is_free ? -1 : 1;
+                }
+
+                const aName = (a.display_name || a.name || '').toLowerCase();
+                const bName = (b.display_name || b.name || '').toLowerCase();
+                return aName.localeCompare(bName);
+            });
+        }
+
+        function updateModelSummary() {
+            const summary = document.getElementById('modelSummary');
+            if (!summary) {
+                return;
+            }
+
+            if (!allModels.length) {
+                summary.textContent = 'No models available. Add an OpenRouter API key to load models.';
+                return;
+            }
+
+            const freeCount = filteredModels.filter(model => model.is_free).length;
+            summary.textContent = `Showing ${filteredModels.length} of ${allModels.length} OpenRouter models (${freeCount} free)`;
+        }
+
+        function updateModelInfo(modelName) {
+            const infoDiv = document.getElementById('modelInfo');
+            if (!infoDiv) {
+                return;
+            }
+
+            if (!modelName) {
+                infoDiv.innerHTML = '<p>Select a model to see its details.</p>';
+                return;
+            }
+
+            const model = allModels.find(item => item.name === modelName);
+            if (!model) {
+                infoDiv.innerHTML = '<p>Select a model to see its details.</p>';
+                return;
+            }
+
+            const displayName = model.display_name || model.name;
+            const contextWindow = model.context_window ? model.context_window.toLocaleString() : 'Unknown';
+            const pricingPrompt = formatPrice(model.pricing_prompt);
+            const pricingCompletion = formatPrice(model.pricing_completion);
+            const description = model.description ? escapeHtml(model.description) : 'No description available.';
+            const badge = model.is_free ? ' 🆓' : '';
+
+            infoDiv.innerHTML = `
+                <p><strong>Name:</strong> ${escapeHtml(displayName)}${badge}</p>
+                <p><strong>Provider:</strong> ${escapeHtml(model.provider)}</p>
+                <p><strong>Context Window:</strong> ${escapeHtml(contextWindow)} tokens</p>
+                <p><strong>Stream Support:</strong> ${model.supports_streaming ? 'Yes' : 'No'}</p>
+                <p><strong>Pricing:</strong> Prompt ${escapeHtml(pricingPrompt)} | Completion ${escapeHtml(pricingCompletion)}</p>
+                <p><strong>Description:</strong> ${description}</p>
+            `;
+        }
+
+        function updateCurrentModelDisplay(modelData) {
+            const currentModelEl = document.getElementById('currentModel');
+            if (!currentModelEl) {
+                return;
+            }
+
+            if (!modelData || !modelData.model_name) {
+                currentModelEl.textContent = 'No model selected';
+                return;
+            }
+
+            const matched = allModels.find(item => item.name === modelData.model_name) || modelData;
+            const identifier = matched.name || modelData.model_name;
+            const displayName = matched.display_name || identifier;
+            const badge = matched.is_free ? ' 🆓' : '';
+            const suffix = displayName !== identifier ? ` (${identifier})` : '';
+
+            currentModelEl.textContent = `${displayName}${suffix}${badge}`;
+        }
+
+        function updateSaveButtonState() {
+            const saveButton = document.getElementById('saveButton');
+            if (!saveButton) {
+                return;
+            }
+
+            const hasSelection = Boolean(currentSelectedModel);
+            const hasChanges = hasSelection && currentSelectedModel !== persistedModelName;
+            const hasModels = filteredModels.length > 0;
+
+            saveButton.disabled = !(hasSelection && hasChanges && hasModels);
+        }
+
+        function renderModelOptions(preferredSelection) {
+            const select = document.getElementById('modelSelect');
+            if (!select) {
+                return;
+            }
+
+            select.innerHTML = '';
+
+            if (!filteredModels.length) {
+                select.disabled = true;
+                const option = document.createElement('option');
+                option.textContent = 'No models match your search.';
+                option.disabled = true;
+                select.appendChild(option);
+                currentSelectedModel = null;
+                updateModelInfo(null);
+                updateSaveButtonState();
+                updateModelSummary();
+                return;
+            }
+
+            select.disabled = false;
+
+            filteredModels.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.name;
+                const displayName = model.display_name || model.name;
+                const badge = model.is_free ? '🆓 ' : '';
+                option.textContent = `${badge}${displayName} - ${model.name}`;
+                option.title = model.description || 'No description available.';
+                select.appendChild(option);
+            });
+
+            const selectionCandidates = [
+                preferredSelection,
+                currentSelectedModel,
+                persistedModelName,
+            ].filter(Boolean);
+
+            const resolvedSelection = selectionCandidates.find(value =>
+                filteredModels.some(model => model.name === value)
+            );
+
+            if (resolvedSelection) {
+                select.value = resolvedSelection;
+                currentSelectedModel = resolvedSelection;
+            } else {
+                select.selectedIndex = 0;
+                currentSelectedModel = select.value;
+            }
+
+            updateModelInfo(currentSelectedModel);
+            updateSaveButtonState();
+            updateModelSummary();
+        }
+
+        function filterModels(searchTerm) {
+            const term = searchTerm.trim().toLowerCase();
+
+            if (!term) {
+                filteredModels = [...allModels];
+            } else {
+                filteredModels = allModels.filter(model => {
+                    const searchable = [
+                        model.name,
+                        model.display_name,
+                        model.description,
+                        ...(model.tags || []),
+                    ];
+                    return searchable.some(value => value && value.toLowerCase().includes(term));
+                });
+            }
+
+            renderModelOptions(currentSelectedModel);
         }
 
         function updateApiStatus(success, message) {
             const statusDiv = document.getElementById('apiStatus');
             const statusIcon = document.getElementById('statusIcon');
             const statusTitle = document.getElementById('statusTitle');
-            const statusMessage = document.getElementById('statusMessage');
+            const statusDetails = document.getElementById('statusDetails');
 
-            if (success) {
-                // Green success styling
-                statusDiv.className = 'bg-green-50 border border-green-200 p-4 rounded-md';
-                statusIcon.className = 'h-5 w-5 text-green-400';
-                statusIcon.innerHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />';
-                statusTitle.className = 'text-sm font-medium text-green-800';
-                statusTitle.textContent = 'API Key Configured Successfully';
-                statusMessage.className = 'text-sm text-green-700 mt-1';
-            } else {
-                // Red error styling
-                statusDiv.className = 'bg-red-50 border border-red-200 p-4 rounded-md';
-                statusIcon.className = 'h-5 w-5 text-red-400';
-                statusIcon.innerHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />';
-                statusTitle.className = 'text-sm font-medium text-red-800';
-                statusTitle.textContent = 'API Configuration Error';
-                statusMessage.className = 'text-sm text-red-700 mt-1';
+            if (!statusDiv || !statusIcon || !statusTitle || !statusDetails) {
+                return;
             }
 
-            statusMessage.textContent = message;
+            if (success) {
+                statusDiv.className = 'bg-green-50 border border-green-200 p-4 rounded-md';
+                statusIcon.className = 'h-5 w-5 text-green-400';
+                statusIcon.innerHTML = '<path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z\" clip-rule=\"evenodd\" />';
+                statusTitle.className = 'text-sm font-medium text-green-800';
+                statusTitle.textContent = 'API Key Configured Successfully';
+                statusDetails.className = 'text-sm text-green-700 mt-1';
+            } else {
+                statusDiv.className = 'bg-red-50 border border-red-200 p-4 rounded-md';
+                statusIcon.className = 'h-5 w-5 text-red-400';
+                statusIcon.innerHTML = '<path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z\" clip-rule=\"evenodd\" />';
+                statusTitle.className = 'text-sm font-medium text-red-800';
+                statusTitle.textContent = 'API Configuration Error';
+                statusDetails.className = 'text-sm text-red-700 mt-1';
+            }
+
+            statusDetails.textContent = message;
         }
 
-        function populateModelSelect(models) {
-            const select = document.getElementById('modelSelect');
-            select.innerHTML = '<option value="">Select a model...</option>';
+        function showStatus(message, type = 'info') {
+            const statusContainer = document.getElementById('statusAlert');
+            const statusText = document.getElementById('statusText');
 
-            // Filter for OpenRouter models
-            const openRouterModels = models.filter(model => model.provider === 'openrouter');
+            if (!statusContainer || !statusText) {
+                return;
+            }
 
-            openRouterModels.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.name;
-                option.textContent = `${model.name} - ${model.description || 'No description'}`;
-                select.appendChild(option);
-            });
+            statusContainer.className = 'p-4 rounded-md mb-4';
+            statusText.textContent = message;
 
-            // Load current selection
-            loadCurrentSettings();
+            if (type === 'success') {
+                statusContainer.classList.add('bg-green-50', 'text-green-800');
+            } else if (type === 'error') {
+                statusContainer.classList.add('bg-red-50', 'text-red-800');
+            } else {
+                statusContainer.classList.add('bg-blue-50', 'text-blue-800');
+            }
+
+            statusContainer.classList.remove('hidden');
+
+            if (statusTimeoutHandle) {
+                clearTimeout(statusTimeoutHandle);
+            }
+
+            statusTimeoutHandle = setTimeout(() => {
+                statusContainer.classList.add('hidden');
+            }, 5000);
+        }
+
+        async function loadModels() {
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/models/`);
+                if (!response.ok) {
+                    updateApiStatus(false, 'Failed to connect to API. Please check your OpenRouter API key configuration.');
+                    showStatus('Failed to load models', 'error');
+                    allModels = [];
+                    filteredModels = [];
+                    renderModelOptions(null);
+                    return;
+                }
+
+                const models = await response.json();
+                allModels = (models || []).filter(model => model.provider === OPENROUTER_PROVIDER);
+
+                sortModels(allModels);
+                filteredModels = [...allModels];
+
+                renderModelOptions(persistedModelName || currentSelectedModel);
+                updateModelInfo(currentSelectedModel);
+
+                if (persistedModelName) {
+                    const persistedMeta = allModels.find(model => model.name === persistedModelName);
+                    if (persistedMeta) {
+                        updateCurrentModelDisplay({
+                            model_name: persistedModelName,
+                            display_name: persistedMeta.display_name,
+                            is_free: persistedMeta.is_free,
+                            name: persistedMeta.name,
+                        });
+                    }
+                }
+
+                updateApiStatus(true, 'API key is configured and working correctly.');
+            } catch (error) {
+                console.error('Error loading models:', error);
+                updateApiStatus(false, 'Network error. Please check your connection and API key.');
+                showStatus('Network error while loading models', 'error');
+                allModels = [];
+                filteredModels = [];
+                renderModelOptions(null);
+            }
         }
 
         async function loadCurrentSettings() {
             try {
                 const response = await fetch(`${API_BASE}/api/v1/models/current`);
-                if (response.ok) {
-                    const currentModel = await response.json();
-                    if (currentModel.model_name) {
-                        document.getElementById('modelSelect').value = currentModel.model_name;
-                        updateModelInfo(currentModel.model_name);
-                        document.getElementById('currentModel').textContent = currentModel.model_name;
-                        currentSelectedModel = currentModel.model_name;
-                    } else {
-                        document.getElementById('currentModel').textContent = 'No model selected';
-                    }
+                if (!response.ok) {
+                    persistedModelName = null;
+                    currentSelectedModel = null;
+                    updateCurrentModelDisplay(null);
+                    return;
+                }
+
+                const currentModel = await response.json();
+                if (currentModel && currentModel.model_name) {
+                    persistedModelName = currentModel.model_name;
+                    currentSelectedModel = currentModel.model_name;
+                    updateCurrentModelDisplay(currentModel);
                 } else {
-                    const errorText = await response.text();
-                    console.error('Failed to load current model:', response.status, errorText);
-                    document.getElementById('currentModel').textContent = 'No model selected';
+                    persistedModelName = null;
+                    currentSelectedModel = null;
+                    updateCurrentModelDisplay(null);
                 }
             } catch (error) {
-                console.error('Error loading settings:', error);
-                document.getElementById('currentModel').textContent = 'No model selected';
-            }
-        }
-
-        function updateModelInfo(modelName) {
-            const model = availableModels.find(m => m.name === modelName);
-            const infoDiv = document.getElementById('modelInfo');
-
-            if (model) {
-                infoDiv.innerHTML = `
-                    <p><strong>Provider:</strong> ${model.provider}</p>
-                    <p><strong>Context Window:</strong> ${model.context_window} tokens</p>
-                    <p><strong>Streaming:</strong> ${model.supports_streaming ? 'Yes' : 'No'}</p>
-                    <p><strong>Description:</strong> ${model.description || 'No description available'}</p>
-                `;
-            } else {
-                infoDiv.innerHTML = '<p>Select a model to see its details.</p>';
+                console.error('Error loading current model:', error);
+                persistedModelName = null;
+                currentSelectedModel = null;
+                updateCurrentModelDisplay(null);
+            } finally {
+                updateSaveButtonState();
             }
         }
 
         async function saveSettings() {
             const select = document.getElementById('modelSelect');
-            const selectedModel = select.value;
-
-            if (!selectedModel) {
-                showStatus('Please select a model', 'error');
+            if (!select) {
                 return;
             }
+
+            const selectedModel = select.value;
+            if (!selectedModel) {
+                showStatus('Please select a model before saving.', 'error');
+                return;
+            }
+
+            const saveButton = document.getElementById('saveButton');
+            const selectedModelMeta = allModels.find(model => model.name === selectedModel);
+            const provider = selectedModelMeta ? selectedModelMeta.provider : OPENROUTER_PROVIDER;
+
+            saveButton.disabled = true;
 
             try {
                 const response = await fetch(`${API_BASE}/api/v1/models/current`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        'model_name': selectedModel,
-                        'provider': 'openrouter'
-                    })
+                        model_name: selectedModel,
+                        provider,
+                    }),
                 });
 
-                if (response.ok) {
-                    document.getElementById('currentModel').textContent = selectedModel;
-                    currentSelectedModel = selectedModel;
-                    showStatus('Settings saved successfully!', 'success');
-                } else {
+                if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Save failed:', response.status, errorText);
                     showStatus(`Failed to save settings: ${response.status}`, 'error');
+                    return;
                 }
+
+                persistedModelName = selectedModel;
+                currentSelectedModel = selectedModel;
+
+                updateCurrentModelDisplay({
+                    model_name: selectedModel,
+                    display_name: selectedModelMeta ? selectedModelMeta.display_name : undefined,
+                    is_free: selectedModelMeta ? selectedModelMeta.is_free : undefined,
+                    name: selectedModel,
+                });
+
+                showStatus('Settings saved successfully!', 'success');
             } catch (error) {
                 console.error('Error saving settings:', error);
                 showStatus('Failed to save settings', 'error');
+            } finally {
+                updateSaveButtonState();
             }
         }
 
-        function showStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('statusMessage');
-            const statusText = document.getElementById('statusText');
-
-            statusDiv.className = 'p-4 rounded-md mb-4';
-            statusText.textContent = message;
-
-            if (type === 'success') {
-                statusDiv.classList.add('bg-green-50', 'text-green-800');
-            } else if (type === 'error') {
-                statusDiv.classList.add('bg-red-50', 'text-red-800');
-            } else {
-                statusDiv.classList.add('bg-blue-50', 'text-blue-800');
-            }
-
-            statusDiv.classList.remove('hidden');
-
-            // Auto-hide after 5 seconds
-            setTimeout(() => {
-                statusDiv.classList.add('hidden');
-            }, 5000);
+        function handleModelChange(event) {
+            currentSelectedModel = event.target.value;
+            updateModelInfo(currentSelectedModel);
+            updateSaveButtonState();
         }
 
-        // Event listeners
-        document.getElementById('modelSelect').addEventListener('change', function(e) {
-            updateModelInfo(e.target.value);
+        function handleSearchInput(event) {
+            filterModels(event.target.value);
+        }
+
+        document.getElementById('modelSelect').addEventListener('change', handleModelChange);
+        document.getElementById('modelSearch').addEventListener('input', handleSearchInput);
+        document.getElementById('saveButton').addEventListener('click', saveSettings);
+
+        window.addEventListener('load', async () => {
+            await loadCurrentSettings();
+            await loadModels();
         });
-
-        // Load models on page load
-        window.onload = loadModels;
     </script>
 </body>
 </html>
