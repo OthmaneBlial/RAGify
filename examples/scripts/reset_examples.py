@@ -7,7 +7,6 @@ that were created by the load_examples.py script.
 
 import sys
 import os
-import json
 import asyncio
 from pathlib import Path
 

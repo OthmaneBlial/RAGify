@@ -6,10 +6,8 @@ that referenced document files exist, and that the overall structure is correct.
 """
 
 import sys
-import os
 import json
 from pathlib import Path
-from typing import List, Dict, Any
 
 
 def validate_examples():
