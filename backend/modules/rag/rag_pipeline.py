@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 from uuid import UUID
 from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +9,7 @@ from .retrieval import retrieval_service, RetrievalResult
 from .embedding import encode_text
 from ..applications.models import Application
 from ..models.model_manager import model_manager
-from shared.models.Model import ProviderType, GenerationRequest
+from shared.models.Model import ProviderType, GenerationRequest, GenerationResponse
 from backend.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -95,13 +95,46 @@ class RAGPipeline:
         prompt = await self._construct_prompt(rag_query, context_results)
 
         # Step 4: Generate response
-        response = await self._generate_response(prompt, rag_query, application)
+        response, provider_type, model_name = await self._generate_response(
+            prompt, rag_query, application
+        )
 
         # Calculate confidence score based on retrieval results
         confidence_score = self._calculate_confidence_score(context_results)
 
+        model_metadata = {
+            "provider": provider_type.value if provider_type else None,
+            "model_name": response.model_name if response.model_name else model_name,
+        }
+
+        if model_metadata["provider"] and model_metadata["model_name"]:
+            try:
+                available_models = await model_manager.get_available_models(
+                    ProviderType(model_metadata["provider"])
+                )
+                match = next(
+                    (
+                        m
+                        for m in available_models
+                        if m.get("name") == model_metadata["model_name"]
+                    ),
+                    None,
+                )
+                if match:
+                    model_metadata["model_display_name"] = (
+                        match.get("display_name") or match.get("name")
+                    )
+                    model_metadata["model_is_free"] = match.get("is_free")
+            except Exception as lookup_error:
+                logger.debug(
+                    "Unable to enrich model metadata for %s/%s: %s",
+                    model_metadata["provider"],
+                    model_metadata["model_name"],
+                    lookup_error,
+                )
+
         return RAGResponse(
-            answer=response,
+            answer=response.text,
             context=context_results,
             metadata={
                 "query_text": rag_query.text,
@@ -111,6 +144,7 @@ class RAGPipeline:
                     str(rag_query.application_id) if rag_query.application_id else None
                 ),
                 "query_embedding_dimension": len(query_embedding),
+                **model_metadata,
             },
             confidence_score=confidence_score,
         )
@@ -194,7 +228,7 @@ Answer:"""
 
     async def _generate_response(
         self, prompt: str, query: RAGQuery, application: Optional[Application] = None
-    ) -> str:
+    ) -> Tuple[GenerationResponse, ProviderType, str]:
         """
         Generate response using configured model provider.
 
@@ -204,15 +238,12 @@ Answer:"""
             application: Optional application configuration
 
         Returns:
-            Generated response text
+            Tuple containing the generation response, provider, and model used
         """
-        try:
-            # Determine provider and model from query, application, or defaults
-            provider_type = ProviderType(
-                settings.default_provider
-            )  # Use default from settings
-            model_name = settings.default_model  # Use default model from settings
+        provider_type = ProviderType(settings.default_provider)
+        model_name = settings.default_model
 
+        try:
             # Override with query parameters if provided
             if query.provider:
                 try:
@@ -261,12 +292,23 @@ Answer:"""
                 f"tokens: {response.usage.get('total_tokens', 0)}"
             )
 
-            return response.text
+            return response, provider_type, model_name
 
         except Exception as e:
             logger.error(f"Error generating response with model provider: {e}")
             # Fallback to simple response
-            return f"I apologize, but I encountered an error while processing your request: {str(e)}. Please try again."
+            fallback_response = GenerationResponse(
+                text=(
+                    "I apologize, but I encountered an error while processing your "
+                    f"request: {str(e)}. Please try again."
+                ),
+                model_name=model_name,
+                provider=provider_type,
+                usage={},
+                metadata={"error": str(e)},
+                finish_reason="error",
+            )
+            return fallback_response, provider_type, model_name
 
     def _calculate_confidence_score(self, context: List[RetrievalResult]) -> float:
         """
