@@ -1,0 +1,114 @@
+# SDK Guides
+
+## Python SDK
+
+### Installation
+Install the SDK using pip:
+
+```bash
+pip install example-api-sdk
+```
+
+### Authentication
+Initialize the client with your API key:
+
+```python
+from example_api import Client
+
+client = Client(api_key='your_api_key_here')
+```
+
+### Usage Examples
+
+#### Creating a User
+```python
+user = client.users.create(
+    name='John Doe',
+    email='john@example.com',
+    password='securepassword'
+)
+print(user.id)
+```
+
+#### Listing Users
+```python
+users = client.users.list(limit=10)
+for user in users:
+    print(user.name)
+```
+
+#### Creating a Widget
+```python
+widget = client.widgets.create(
+    name='My Widget',
+    description='A sample widget',
+    color='blue'
+)
+print(widget.id)
+```
+
+### Error Handling
+The SDK raises exceptions for API errors:
+
+```python
+try:
+    user = client.users.create(name='', email='invalid')
+except ValidationError as e:
+    print(f"Validation error: {e}")
+except APIError as e:
+    print(f"API error: {e}")
+```
+
+## JavaScript SDK
+
+### Installation
+Install via npm:
+
+```bash
+npm install example-api-sdk
+```
+
+### Authentication
+```javascript
+const { Client } = require('example-api-sdk');
+
+const client = new Client({
+  apiKey: 'your_api_key_here'
+});
+```
+
+### Usage Examples
+
+#### Creating a User
+```javascript
+async function createUser() {
+  try {
+    const user = await client.users.create({
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      password: 'securepassword'
+    });
+    console.log(user.id);
+  } catch (error) {
+    console.error(error);
+  }
+}
+```
+
+#### Listing Widgets
+```javascript
+async function listWidgets() {
+  try {
+    const widgets = await client.widgets.list({ limit: 5 });
+    widgets.forEach(widget => console.log(widget.name));
+  } catch (error) {
+    console.error(error);
+  }
+}
+```
+
+## Best Practices
+- Store API keys securely, never in source code
+- Handle rate limits by implementing exponential backoff
+- Use HTTPS in production
+- Validate input data before sending to API

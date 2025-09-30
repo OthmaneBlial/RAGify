@@ -1,0 +1,29 @@
+Service Agreement
+
+This Service Agreement ("Agreement") is entered into between Provider and Client.
+
+Services Provided
+Provider shall deliver software development services as outlined in Exhibit A.
+
+Term
+This Agreement commences on the Effective Date and continues for 12 months, renewable annually.
+
+Fees and Payment
+Client shall pay $10,000 monthly. Payments due within 30 days of invoice.
+
+Termination
+Either party may terminate with 30 days written notice. Immediate termination for material breach.
+
+Termination Clauses
+- For cause: Breach of confidentiality, non-payment
+- Without cause: 30 days notice
+- Effect of termination: All obligations cease, except confidentiality and payment for services rendered
+
+Confidentiality
+Parties agree to maintain confidentiality of proprietary information.
+
+Governing Law
+This Agreement governed by laws of California.
+
+Entire Agreement
+This constitutes the entire agreement between parties.

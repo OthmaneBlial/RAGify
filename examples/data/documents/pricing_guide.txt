@@ -1,0 +1,37 @@
+Pricing Guide - SalesPro CRM
+
+Subscription Plans
+
+Starter Plan
+- Price: $29 per user/month (billed annually)
+- Features: Contact management, basic reporting, email integration
+- Limits: Up to 1,000 contacts, 5 users
+- Best for: Small teams starting out
+
+Professional Plan
+- Price: $59 per user/month (billed annually)
+- Features: All starter features + sales pipeline, automation, API access
+- Limits: Unlimited contacts, up to 50 users
+- Best for: Growing businesses
+
+Enterprise Plan
+- Price: Custom pricing (contact sales)
+- Features: All professional features + advanced analytics, white-labeling, dedicated support
+- Limits: Unlimited everything
+- Best for: Large organizations
+
+Add-ons
+- Extra storage: $10/month per 100GB
+- Advanced integrations: $20/user/month
+- Training sessions: $500 per session
+
+Discounts
+- Annual billing: 20% off monthly rates
+- Non-profits: 50% discount
+- Volume discounts for 100+ users
+
+Free Trial
+- 14-day free trial, no credit card required
+- Full access to professional features
+
+Contact sales@salespro.com for quotes or custom plans.

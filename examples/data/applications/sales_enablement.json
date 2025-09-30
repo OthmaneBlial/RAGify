@@ -1,0 +1,34 @@
+{
+  "knowledge_base": "sales_enablement_knowledge_base",
+  "documents": [
+    {
+      "title": "Product Specifications",
+      "filename": "product_specs.txt"
+    },
+    {
+      "title": "Competitor Analysis",
+      "filename": "competitor_analysis.txt"
+    },
+    {
+      "title": "Case Studies",
+      "filename": "case_studies.txt"
+    },
+    {
+      "title": "Pricing Guide",
+      "filename": "pricing_guide.txt"
+    },
+    {
+      "title": "Marketing Brochure",
+      "filename": "marketing_brochure.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Sales Enablement Co-pilot",
+    "description": "An AI co-pilot to assist sales teams with product information, competitive insights, and customer engagement.",
+    "sample_questions": [
+      "What are our competitor differentiators?",
+      "Can you summarize the case studies?",
+      "What are the pricing tiers?"
+    ]
+  }
+}

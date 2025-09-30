@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Optional, List
 import aiohttp
@@ -33,14 +34,20 @@ class ModelProvider(ABC):
         self.session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self.settings.timeout_seconds)
-        )
+        await self.ensure_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
+
+    async def ensure_session(self):
+        if self.session and not self.session.closed:
+            return
+
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=self.settings.timeout_seconds)
+        )
 
     @abstractmethod
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
@@ -59,7 +66,7 @@ class ModelProvider(ABC):
         """Test connection to the provider."""
 
     @abstractmethod
-    def get_available_models(self) -> List[ModelInfo]:
+    async def get_available_models(self) -> List[ModelInfo]:
         """Get list of available models."""
 
     @abstractmethod
@@ -75,7 +82,7 @@ class OpenAIProvider(ModelProvider):
         self.base_url = settings.base_url or "https://api.openai.com/v1"
         self.api_key = settings.api_key
 
-    def get_available_models(self) -> List[ModelInfo]:
+    async def get_available_models(self) -> List[ModelInfo]:
         return [
             ModelInfo(
                 name="gpt-3.5-turbo",
@@ -106,6 +113,7 @@ class OpenAIProvider(ModelProvider):
         retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
     )
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -158,6 +166,7 @@ class OpenAIProvider(ModelProvider):
     async def generate_stream(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -209,22 +218,25 @@ class OpenAIProvider(ModelProvider):
             url = f"{self.base_url}/models"
             headers = {"Authorization": f"Bearer {self.api_key}"}
 
+            await self.ensure_session()
+
             async with self.session.get(url, headers=headers) as response:
                 if response.status == 200:
                     models = await response.json()
                     available_models = [m["id"] for m in models.get("data", [])]
                     if request.model_name in available_models:
+                        available_model_info = next(
+                            (
+                                m
+                                for m in await self.get_available_models()
+                                if m.name == request.model_name
+                            ),
+                            None,
+                        )
                         return TestConnectionResponse(
                             success=True,
                             message="Connection successful",
-                            model_info=next(
-                                (
-                                    m
-                                    for m in self.get_available_models()
-                                    if m.name == request.model_name
-                                ),
-                                None,
-                            ),
+                            model_info=available_model_info,
                         )
                     else:
                         return TestConnectionResponse(
@@ -267,7 +279,7 @@ class AnthropicProvider(ModelProvider):
         self.base_url = settings.base_url or "https://api.anthropic.com"
         self.api_key = settings.api_key
 
-    def get_available_models(self) -> List[ModelInfo]:
+    async def get_available_models(self) -> List[ModelInfo]:
         return [
             ModelInfo(
                 name="claude-3-haiku-20240307",
@@ -298,6 +310,7 @@ class AnthropicProvider(ModelProvider):
         retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
     )
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -347,6 +360,7 @@ class AnthropicProvider(ModelProvider):
     async def generate_stream(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -407,17 +421,19 @@ class AnthropicProvider(ModelProvider):
             )
 
             _ = await self.generate(test_request)
+            available_model_info = next(
+                (
+                    m
+                    for m in await self.get_available_models()
+                    if m.name == request.model_name
+                ),
+                None,
+            )
+
             return TestConnectionResponse(
                 success=True,
                 message="Connection successful",
-                model_info=next(
-                    (
-                        m
-                        for m in self.get_available_models()
-                        if m.name == request.model_name
-                    ),
-                    None,
-                ),
+                model_info=available_model_info,
             )
         except Exception as e:
             return TestConnectionResponse(
@@ -448,7 +464,7 @@ class GoogleProvider(ModelProvider):
         self.base_url = settings.base_url or "https://generativelanguage.googleapis.com"
         self.api_key = settings.api_key
 
-    def get_available_models(self) -> List[ModelInfo]:
+    async def get_available_models(self) -> List[ModelInfo]:
         return [
             ModelInfo(
                 name="models/gemini-2.5-flash",
@@ -479,6 +495,7 @@ class GoogleProvider(ModelProvider):
         retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
     )
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -527,6 +544,7 @@ class GoogleProvider(ModelProvider):
     async def generate_stream(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -589,17 +607,19 @@ class GoogleProvider(ModelProvider):
             )
 
             _ = await self.generate(test_request)
+            available_model_info = next(
+                (
+                    m
+                    for m in await self.get_available_models()
+                    if m.name == request.model_name
+                ),
+                None,
+            )
+
             return TestConnectionResponse(
                 success=True,
                 message="Connection successful",
-                model_info=next(
-                    (
-                        m
-                        for m in self.get_available_models()
-                        if m.name == request.model_name
-                    ),
-                    None,
-                ),
+                model_info=available_model_info,
             )
         except Exception as e:
             return TestConnectionResponse(
@@ -629,38 +649,87 @@ class OpenRouterProvider(ModelProvider):
         super().__init__(settings)
         self.base_url = settings.base_url or "https://openrouter.ai/api/v1"
         self.api_key = settings.api_key
+        self._model_cache: List[ModelInfo] = []
+        self._model_cache_expiry: float = 0.0
+        self._model_cache_ttl_seconds: int = 300
 
-    def get_available_models(self) -> List[ModelInfo]:
-        return [
-            ModelInfo(
-                name="openai/gpt-5-nano",
-                provider=ProviderType.OPENROUTER,
-                context_window=128000,
-                supports_streaming=True,
-                description="Fast and efficient OpenAI GPT-5 nano model",
-            ),
-            ModelInfo(
-                name="openai/gpt-oss-20b",
-                provider=ProviderType.OPENROUTER,
-                context_window=4096,
-                supports_streaming=True,
-                description="Open-source 20B parameter model",
-            ),
-            ModelInfo(
-                name="z-ai/glm-4-32b",
-                provider=ProviderType.OPENROUTER,
-                context_window=131072,
-                supports_streaming=True,
-                description="Z-AI GLM-4 32B model",
-            ),
-            ModelInfo(
-                name="google/gemini-2.5-flash-lite",
-                provider=ProviderType.OPENROUTER,
-                context_window=1048576,
-                supports_streaming=True,
-                description="Google Gemini 2.5 Flash Lite",
-            ),
-        ]
+    async def get_available_models(self) -> List[ModelInfo]:
+        current_time = time.time()
+        if self._model_cache and current_time < self._model_cache_expiry:
+            return self._model_cache
+
+        if not self.api_key:
+            logger.warning("OpenRouter API key not configured; returning empty model list")
+            self._model_cache = []
+            self._model_cache_expiry = current_time + self._model_cache_ttl_seconds
+            return self._model_cache
+
+        await self.ensure_session()
+
+        url = f"{self.base_url}/models"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://your-app.com",  # Replace with deployed app URL if available
+            "X-Title": "RAGify",
+        }
+
+        try:
+            async with self.session.get(url, headers=headers) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(
+                        f"OpenRouter API error: {response.status} - {error_text}"
+                    )
+
+                payload = await response.json()
+        except Exception as exc:
+            logger.error(f"Failed to fetch models from OpenRouter: {exc}")
+            if self._model_cache:
+                return self._model_cache
+            raise
+
+        models: List[ModelInfo] = []
+        for model_data in payload.get("data", []):
+            try:
+                pricing = model_data.get("pricing") or {}
+                prompt_price = pricing.get("prompt")
+                completion_price = pricing.get("completion")
+
+                def _is_zero(value: Optional[str]) -> bool:
+                    try:
+                        return float(value) == 0.0
+                    except (TypeError, ValueError):
+                        return False
+
+                is_free = _is_zero(prompt_price) and _is_zero(completion_price)
+
+                model_info = ModelInfo(
+                    name=model_data.get("id", ""),
+                    provider=ProviderType.OPENROUTER,
+                    context_window=model_data.get("context_length") or 0,
+                    supports_streaming=model_data.get("capabilities", {}).get(
+                        "streaming", True
+                    ),
+                    description=model_data.get("description"),
+                    display_name=model_data.get("name"),
+                    pricing_prompt=prompt_price,
+                    pricing_completion=completion_price,
+                    tags=model_data.get("tags"),
+                    is_free=is_free,
+                )
+                models.append(model_info)
+            except Exception as exc:
+                logger.debug(
+                    "Skipping model entry from OpenRouter response due to error: %s", exc
+                )
+                continue
+
+        models.sort(key=lambda m: (not m.is_free, (m.display_name or m.name).lower()))
+
+        self._model_cache = models
+        self._model_cache_expiry = current_time + self._model_cache_ttl_seconds
+        return models
 
     @retry(
         stop=stop_after_attempt(3),
@@ -668,6 +737,7 @@ class OpenRouterProvider(ModelProvider):
         retry=retry_if_exception_type((aiohttp.ClientError, asyncio.TimeoutError)),
     )
     async def generate(self, request: GenerationRequest) -> GenerationResponse:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -724,6 +794,7 @@ class OpenRouterProvider(ModelProvider):
     async def generate_stream(
         self, request: GenerationRequest
     ) -> AsyncGenerator[str, None]:
+        await self.ensure_session()
         if not self.session:
             raise RuntimeError("Provider not initialized. Use async context manager.")
 
@@ -777,24 +848,31 @@ class OpenRouterProvider(ModelProvider):
         try:
             # Simple test by listing models
             url = f"{self.base_url}/models"
-            headers = {"Authorization": f"Bearer {self.api_key}"}
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "HTTP-Referer": "https://your-app.com",
+                "X-Title": "RAGify",
+            }
+
+            await self.ensure_session()
 
             async with self.session.get(url, headers=headers) as response:
                 if response.status == 200:
                     models_data = await response.json()
                     available_models = [m["id"] for m in models_data.get("data", [])]
                     if request.model_name in available_models:
+                        available_model_info = next(
+                            (
+                                m
+                                for m in await self.get_available_models()
+                                if m.name == request.model_name
+                            ),
+                            None,
+                        )
                         return TestConnectionResponse(
                             success=True,
                             message="Connection successful",
-                            model_info=next(
-                                (
-                                    m
-                                    for m in self.get_available_models()
-                                    if m.name == request.model_name
-                                ),
-                                None,
-                            ),
+                            model_info=available_model_info,
                         )
                     else:
                         return TestConnectionResponse(

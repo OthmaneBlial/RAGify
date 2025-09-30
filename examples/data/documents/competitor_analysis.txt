@@ -1,0 +1,32 @@
+Competitor Analysis - SalesPro CRM
+
+Market Overview
+The CRM market is dominated by Salesforce and HubSpot, with SalesPro targeting SMBs.
+
+Key Competitors
+1. Salesforce: Enterprise-focused, complex, high cost
+2. HubSpot: Marketing-centric, free tier, limited sales features
+
+SalesPro Differentiators
+- Ease of use: 50% faster onboarding than Salesforce
+- Pricing: 30% lower than competitors for similar features
+- Integrations: Native support for 200+ apps vs. HubSpot's 100
+- AI features: Built-in predictive analytics not available in free tiers
+- Customization: Drag-and-drop interface vs. code-heavy Salesforce
+
+Strengths
+- User-friendly interface
+- Comprehensive support
+- Scalable for growing businesses
+
+Weaknesses of Competitors
+- Salesforce: Steep learning curve, expensive
+- HubSpot: Limited advanced sales tools
+
+Market Position
+SalesPro captures 15% of SMB CRM market, growing 25% YoY.
+
+Recommendations
+- Emphasize ease of use in pitches
+- Highlight cost savings
+- Use case studies to demonstrate ROI

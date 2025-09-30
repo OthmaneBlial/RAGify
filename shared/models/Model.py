@@ -52,9 +52,14 @@ class ModelInfo(BaseModel):
 
     name: str
     provider: ProviderType
-    context_window: int
+    context_window: int = 0
     supports_streaming: bool = True
     description: Optional[str] = None
+    display_name: Optional[str] = None
+    pricing_prompt: Optional[str] = None
+    pricing_completion: Optional[str] = None
+    tags: Optional[List[str]] = None
+    is_free: bool = False
 
 
 class ProviderSettings(BaseModel):

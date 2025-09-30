@@ -1,0 +1,26 @@
+{
+  "knowledge_base": "codebase_qa_knowledge_base",
+  "documents": [
+    {
+      "title": "Source Code",
+      "filename": "source_code.txt"
+    },
+    {
+      "title": "README",
+      "filename": "readme.md"
+    },
+    {
+      "title": "Architecture Diagram",
+      "filename": "architecture_diagram.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Codebase Q&A Bot",
+    "description": "A bot to answer questions about the codebase, including logic, classes, and file purposes.",
+    "sample_questions": [
+      "What is the database connection logic?",
+      "What is the purpose of the UserAuthenticationService class?",
+      "Which files handle payment processing?"
+    ]
+  }
+}

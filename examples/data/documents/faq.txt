@@ -1,0 +1,21 @@
+Frequently Asked Questions
+
+Q: How do I troubleshoot my device?
+A: Check connections, restart device, update firmware via app.
+
+Q: How do I reset my password?
+A: Use 'Forgot Password' in the login screen, check email for reset link.
+
+Q: What is the return policy?
+A: 30-day return for unused items in original packaging. Contact support for RMA.
+
+Q: Device not connecting to Wi-Fi?
+A: Ensure 2.4GHz network, check password, move closer to router.
+
+Q: How to update firmware?
+A: Open app, go to device settings, select 'Check for Updates'.
+
+Q: Warranty information?
+A: 1-year limited warranty covers defects. Contact support for claims.
+
+For more help, visit support.smarthome.com or call 1-800-123-4567.

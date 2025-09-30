@@ -1,0 +1,28 @@
+IT Setup Guide
+
+Welcome! Follow these steps to set up your workstation.
+
+1. Hardware Setup
+- Connect laptop to power and monitor
+- Attach keyboard, mouse, and any peripherals
+
+2. Software Installation
+- Install company VPN client
+- Set up email with Outlook
+- Install required software: Slack, Zoom, Office 365
+
+3. Account Setup
+- Create Active Directory account
+- Set password (must be 8+ characters, include numbers and symbols)
+- Enable two-factor authentication
+
+4. Security
+- Install antivirus software
+- Use strong passwords
+- Report any suspicious activity
+
+5. Remote Access
+- Use VPN for external connections
+- Access company resources via portal
+
+Contact IT support at it@techcorp.com for assistance.

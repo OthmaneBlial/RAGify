@@ -6,6 +6,7 @@ Deletes all applications except default and recreates fresh ones
 
 import requests
 import sys
+from typing import Dict, Any
 
 # Configuration
 API_BASE = "http://localhost:8000"
@@ -18,6 +19,61 @@ def check_server_running():
         return response.status_code == 200
     except Exception:
         return False
+
+
+def delete_application_documents(app: Dict[str, Any]) -> bool:
+    """Remove all documents that belong to an application before deletion."""
+    app_id = app["id"]
+    app_name = app.get("name", app_id)
+
+    try:
+        documents_response = requests.get(
+            f"{API_BASE}/api/v1/applications/{app_id}/documents/", timeout=10
+        )
+    except Exception as exc:
+        print(f"⚠️  Could not list documents for {app_name}: {exc}")
+        return False
+
+    if documents_response.status_code != 200:
+        print(
+            f"⚠️  Failed to list documents for {app_name}: "
+            f"{documents_response.status_code}"
+        )
+        return False
+
+    documents = documents_response.json()
+    if not documents:
+        return True
+
+    success = True
+    for document in documents:
+        doc_id = document.get("id")
+        doc_name = document.get("filename") or document.get("title") or doc_id
+        try:
+            delete_response = requests.delete(
+                f"{API_BASE}/api/v1/applications/{app_id}/documents/{doc_id}",
+                timeout=10,
+            )
+        except Exception as exc:
+            print(
+                f"❌ Failed to delete document '{doc_name}' for {app_name}: {exc}"
+            )
+            success = False
+            continue
+
+        if delete_response.status_code == 200:
+            print(f"📄 Deleted document: {doc_name}")
+        else:
+            try:
+                detail = delete_response.json().get("detail", "Unknown error")
+            except ValueError:
+                detail = delete_response.text or "Unknown error"
+            print(
+                f"❌ Failed to delete document '{doc_name}' for {app_name}: {detail}"
+            )
+            success = False
+
+    return success
 
 
 def reset_database():
@@ -48,18 +104,33 @@ def reset_database():
         # Delete all applications except default
         deleted_count = 0
         for app in applications:
-            if app["name"] != "Default Chat Application":
-                delete_response = requests.delete(
-                    f"{API_BASE}/api/v1/applications/{app['id']}"
-                )
-                if delete_response.status_code == 200:
-                    print(f"🗑️  Deleted: {app['name']}")
-                    deleted_count += 1
-                else:
-                    error_detail = delete_response.json().get("detail", "Unknown error")
-                    print(f"❌ Failed to delete: {app['name']} - {error_detail}")
-            else:
+            if app["name"] == "Default Chat Application":
                 print(f"⏭️  Skipping default application: {app['name']}")
+                continue
+
+            # Remove documents first to avoid foreign key constraint errors
+            docs_deleted = delete_application_documents(app)
+
+            delete_response = requests.delete(
+                f"{API_BASE}/api/v1/applications/{app['id']}", timeout=10
+            )
+            if delete_response.status_code == 200:
+                print(f"🗑️  Deleted: {app['name']}")
+                deleted_count += 1
+            else:
+                try:
+                    error_detail = delete_response.json().get(
+                        "detail", "Unknown error"
+                    )
+                except ValueError:
+                    error_detail = delete_response.text or "Unknown error"
+                if docs_deleted:
+                    print(f"❌ Failed to delete: {app['name']} - {error_detail}")
+                else:
+                    print(
+                        f"❌ Failed to delete: {app['name']} - "
+                        f"documents could not be removed ({error_detail})"
+                    )
 
         print(f"✅ Successfully deleted {deleted_count} applications")
 

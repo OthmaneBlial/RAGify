@@ -1,0 +1,26 @@
+{
+  "knowledge_base": "research_paper_assistant_knowledge_base",
+  "documents": [
+    {
+      "title": "Machine Learning Paper",
+      "filename": "ml_paper.txt"
+    },
+    {
+      "title": "History Research Paper",
+      "filename": "history_paper.txt"
+    },
+    {
+      "title": "Biology Research Paper",
+      "filename": "biology_paper.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Research Paper Assistant",
+    "description": "An AI assistant to help researchers analyze and understand academic papers across various disciplines.",
+    "sample_questions": [
+      "Summarize the key findings from 'Attention is All You Need'.",
+      "What are the methodology differences between the machine learning and biology papers?",
+      "How does this paper cite Dr. Smith's 2021 study?"
+    ]
+  }
+}

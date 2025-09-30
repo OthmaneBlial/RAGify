@@ -1,0 +1,31 @@
+API Documentation - SmartHome Hub
+
+Base URL: https://api.smarthome.com/v1
+
+Authentication
+- Use API key in header: Authorization: Bearer <your_key>
+- Get key from developer portal
+
+Endpoints
+
+GET /devices
+- List all connected devices
+- Response: JSON array of device objects
+
+POST /devices/{id}/command
+- Send command to device
+- Body: {"command": "turn_on", "params": {}}
+- Response: {"status": "success"}
+
+GET /status
+- Get hub status
+- Response: {"online": true, "firmware": "1.2.3"}
+
+Error Codes
+- 401: Unauthorized
+- 404: Device not found
+- 500: Internal server error
+
+Rate Limits: 100 requests per minute
+
+For full docs, visit developer.smarthome.com/api

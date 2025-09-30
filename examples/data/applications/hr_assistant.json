@@ -1,0 +1,30 @@
+{
+  "knowledge_base": "hr_knowledge_base",
+  "documents": [
+    {
+      "title": "Employee Handbook",
+      "filename": "employee_handbook.txt"
+    },
+    {
+      "title": "Benefits Guide",
+      "filename": "benefits_guide.txt"
+    },
+    {
+      "title": "Company Policies",
+      "filename": "company_policies.txt"
+    },
+    {
+      "title": "IT Setup Guide",
+      "filename": "it_setup_guide.txt"
+    }
+  ],
+  "application_details": {
+    "name": "HR & Onboarding Assistant",
+    "description": "An AI assistant to help with HR queries, onboarding, and employee information.",
+    "sample_questions": [
+      "What is the remote work policy?",
+      "How do I submit an expense report?",
+      "What dental insurance options are available?"
+    ]
+  }
+}

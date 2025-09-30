@@ -1,0 +1,26 @@
+{
+  "knowledge_base": "study_guide_knowledge_base",
+  "documents": [
+    {
+      "title": "Textbook Chapter",
+      "filename": "textbook_chapter.txt"
+    },
+    {
+      "title": "Lecture Notes",
+      "filename": "lecture_notes.txt"
+    },
+    {
+      "title": "Reading Assignment",
+      "filename": "reading_assignment.txt"
+    }
+  ],
+  "application_details": {
+    "name": "Interactive Study Guide",
+    "description": "An interactive AI study guide to help students learn and review educational content.",
+    "sample_questions": [
+      "Explain the process of photosynthesis.",
+      "What are the key dates of the American Revolution?",
+      "What are the main themes in this literature chapter?"
+    ]
+  }
+}

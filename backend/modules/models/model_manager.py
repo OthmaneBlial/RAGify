@@ -110,8 +110,8 @@ class ModelManager:
             await self.initialize()
 
         provider = self.providers.get(provider_type)
-        if provider and not provider.session:
-            await provider.__aenter__()
+        if provider:
+            await provider.ensure_session()
         return provider
 
     async def _check_rate_limit(self, provider_type: ProviderType) -> bool:
@@ -265,11 +265,14 @@ class ModelManager:
         async with self.provider_context(request.provider):
             return await provider.test_connection(request)
 
-    def get_available_models(
+    async def get_available_models(
         self, provider_type: Optional[ProviderType] = None
     ) -> List[Dict]:
         """Get list of available models."""
-        models = []
+        if not self._initialized:
+            await self.initialize()
+
+        models: List[Dict] = []
 
         if provider_type:
             providers_to_check = (
@@ -279,18 +282,35 @@ class ModelManager:
             providers_to_check = list(self.providers.keys())
 
         for p_type in providers_to_check:
-            provider = self.providers.get(p_type)
-            if provider:
-                for model_info in provider.get_available_models():
-                    models.append(
-                        {
-                            "name": model_info.name,
-                            "provider": model_info.provider.value,
-                            "context_window": model_info.context_window,
-                            "supports_streaming": model_info.supports_streaming,
-                            "description": model_info.description,
-                        }
-                    )
+            provider = await self.get_provider(p_type)
+            if not provider:
+                continue
+
+            try:
+                provider_models = await provider.get_available_models()
+            except Exception as exc:
+                logger.error(
+                    "Failed to retrieve models for provider %s: %s", p_type.value, exc
+                )
+                continue
+
+            for model_info in provider_models:
+                models.append(
+                    {
+                        "name": model_info.name,
+                        "provider": model_info.provider.value,
+                        "context_window": model_info.context_window,
+                        "supports_streaming": model_info.supports_streaming,
+                        "description": model_info.description,
+                        "display_name": model_info.display_name,
+                        "pricing_prompt": model_info.pricing_prompt,
+                        "pricing_completion": model_info.pricing_completion,
+                        "tags": model_info.tags,
+                        "is_free": model_info.is_free,
+                    }
+                )
+
+        models.sort(key=lambda m: (m.get("provider"), not m.get("is_free"), (m.get("display_name") or m.get("name") or "").lower()))
 
         return models
 
