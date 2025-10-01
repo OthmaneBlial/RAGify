@@ -182,7 +182,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Frontend
+    # Frontend (adjust the upstream port if running the Docker stack)
     location / {
         proxy_pass http://localhost:5173;
         proxy_set_header Host $host;
@@ -199,6 +199,7 @@ server {
 # Caddyfile
 yourdomain.com {
     reverse_proxy localhost:8000
+    # Replace 5173 with 15173 if you expose the frontend via Docker
     reverse_proxy localhost:5173
 
     # Automatic HTTPS

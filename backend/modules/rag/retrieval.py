@@ -70,6 +70,7 @@ class RetrievalService:
         knowledge_base_ids: Optional[List[UUID]] = None,
         application_id: Optional[UUID] = None,
         limit: Optional[int] = None,
+        query_vector: Optional[List[float]] = None,
     ) -> List[RetrievalResult]:
         """
         Perform semantic search using vector similarity.
@@ -87,7 +88,8 @@ class RetrievalService:
             limit = self.max_results
 
         # Generate embedding for query
-        query_vector = await encode_text(query)
+        if query_vector is None:
+            query_vector = await encode_text(query)
 
         results = []
 
@@ -114,6 +116,7 @@ class RetrievalService:
                     "document_id": str(result["document_id"]),
                     "document_title": result["document_title"],
                     "knowledge_base_id": str(result["knowledge_base_id"]),
+                    "paragraph_excerpt": result.get("paragraph_content"),
                 },
                 source=result["document_title"],
             )
@@ -191,6 +194,7 @@ class RetrievalService:
                     "document_id": str(row.document_id),
                     "document_title": row.document_title,
                     "knowledge_base_id": str(row.knowledge_base_id),
+                    "paragraph_excerpt": row.paragraph_content,
                 },
                 source=row.document_title,
             )
@@ -205,8 +209,8 @@ class RetrievalService:
         knowledge_base_ids: Optional[List[UUID]] = None,
         application_id: Optional[UUID] = None,
         limit: Optional[int] = None,
-        semantic_weight: float = 0.7,
-        keyword_weight: float = 0.3,
+        k: int = 60,
+        query_vector: Optional[List[float]] = None,
     ) -> List[RetrievalResult]:
         """
         Perform hybrid search combining semantic and keyword search.
@@ -226,56 +230,52 @@ class RetrievalService:
             limit = self.max_results
 
         # Perform both searches concurrently
-        semantic_task = self.semantic_search(query, db, knowledge_base_ids, application_id, limit * 2)
-        keyword_task = self.keyword_search(query, db, knowledge_base_ids, application_id, limit * 2)
+        semantic_task = self.semantic_search(
+            query,
+            db,
+            knowledge_base_ids,
+            application_id,
+            limit * 2,
+            query_vector=query_vector,
+        )
+        keyword_task = self.keyword_search(
+            query, db, knowledge_base_ids, application_id, limit * 2
+        )
 
         semantic_results, keyword_results = await asyncio.gather(
             semantic_task, keyword_task
         )
 
         # Combine and deduplicate results
-        combined_results = {}
-        max_score = 0
+        # Reciprocal Rank Fusion
+        def to_rank_map(items: List[RetrievalResult]) -> Dict[str, int]:
+            return {r.metadata["paragraph_id"]: idx + 1 for idx, r in enumerate(items)}
 
-        # Process semantic results
-        for result in semantic_results:
-            key = result.metadata["paragraph_id"]
-            if key not in combined_results:
-                combined_results[key] = {
-                    "result": result,
-                    "semantic_score": result.score,
-                    "keyword_score": 0.0,
-                }
-            else:
-                combined_results[key]["semantic_score"] = result.score
-            max_score = max(max_score, result.score)
+        sem_rank = to_rank_map(semantic_results)
+        kw_rank = to_rank_map(keyword_results)
 
-        # Process keyword results
-        for result in keyword_results:
-            key = result.metadata["paragraph_id"]
-            if key not in combined_results:
-                combined_results[key] = {
-                    "result": result,
-                    "semantic_score": 0.0,
-                    "keyword_score": result.score,
-                }
-            else:
-                combined_results[key]["keyword_score"] = result.score
-            max_score = max(max_score, result.score)
+        combined: Dict[str, RetrievalResult] = {}
+        for res in semantic_results + keyword_results:
+            key = res.metadata["paragraph_id"]
+            if key not in combined:
+                combined[key] = res
 
-        # Calculate combined scores and normalize
-        final_results = []
-        for item in combined_results.values():
-            semantic_norm = item["semantic_score"] / max_score if max_score > 0 else 0
-            keyword_norm = item["keyword_score"] / max_score if max_score > 0 else 0
+        final_results: List[RetrievalResult] = []
+        for key, res in combined.items():
+            rs = sem_rank.get(key)
+            rk = kw_rank.get(key)
+            score = 0.0
+            if rs:
+                score += 1.0 / (k + rs)
+            if rk:
+                score += 1.0 / (k + rk)
+            res.score = score
+            final_results.append(res)
 
-            combined_score = (
-                semantic_weight * semantic_norm + keyword_weight * keyword_norm
-            )
-
-            result = item["result"]
-            result.score = combined_score
-            final_results.append(result)
+        if final_results:
+            max_rrf = max(r.score for r in final_results) or 1.0
+            for r in final_results:
+                r.score = r.score / max_rrf
 
         # Sort by combined score and return top results
         final_results.sort(key=lambda x: x.score, reverse=True)
@@ -289,6 +289,7 @@ class RetrievalService:
         application_id: Optional[UUID] = None,
         context_window: int = 1000,
         search_type: str = "hybrid",
+        query_vector: Optional[List[float]] = None,
     ) -> List[RetrievalResult]:
         """
         Retrieve content with context windows.
@@ -305,11 +306,23 @@ class RetrievalService:
         """
         # Perform search based on type
         if search_type == "semantic":
-            results = await self.semantic_search(query, db, knowledge_base_ids, application_id)
+            results = await self.semantic_search(
+                query,
+                db,
+                knowledge_base_ids,
+                application_id,
+                query_vector=query_vector,
+            )
         elif search_type == "keyword":
             results = await self.keyword_search(query, db, knowledge_base_ids, application_id)
         elif search_type == "hybrid":
-            results = await self.hybrid_search(query, db, knowledge_base_ids, application_id)
+            results = await self.hybrid_search(
+                query,
+                db,
+                knowledge_base_ids,
+                application_id,
+                query_vector=query_vector,
+            )
         else:
             raise ValueError(f"Unknown search type: {search_type}")
 

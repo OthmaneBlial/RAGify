@@ -6,6 +6,8 @@ Tests FastAPI endpoint functionality, request/response validation, error handlin
 import pytest
 import sys
 import os
+import asyncio
+from uuid import UUID
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -664,11 +666,30 @@ class TestChatEndpoints:
         assert create_response.status_code == 200
         app_id = create_response.json()["id"]
 
+        # Seed chat history directly
+        from backend.core.database import AsyncSessionLocal
+        from backend.modules.applications.crud import create_chat_message, get_application_chat_history
+
+        async def _seed_history():
+            async with AsyncSessionLocal() as session:
+                await create_chat_message(session, UUID(app_id), "Message 1", "Response 1")
+                await create_chat_message(session, UUID(app_id), "Message 2", "Response 2")
+
+        asyncio.run(_seed_history())
+
         # Clear conversation history
         response = test_client.delete(f"/api/v1/chat/history/{app_id}")
         assert response.status_code == 200
         data = response.json()
-        assert "message" in data
+        assert data.get("deleted_count") == 2
+        assert data.get("message")
+
+        async def _fetch_history():
+            async with AsyncSessionLocal() as session:
+                return await get_application_chat_history(session, UUID(app_id))
+
+        history = asyncio.run(_fetch_history())
+        assert history == []
 
     def test_clear_conversation_history_not_found(self, test_client):
         """Test clearing conversation history for non-existent application."""

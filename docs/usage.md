@@ -4,7 +4,7 @@ This guide provides step-by-step instructions for using RAGify to create knowled
 
 ## Getting Started
 
-After [setting up](setup.md) RAGify, access the web interface at `http://localhost:5173`.
+After [setting up](setup.md) RAGify, access the web interface at `http://localhost:5173` for local development, or `http://localhost:15173` if you started the Docker stack. The assistant only answers when it finds supporting passages; otherwise, it clearly tells you that more information is needed.
 
 The interface consists of three main sections:
 
@@ -87,6 +87,8 @@ Fine-tune your application's behavior:
 2. Select an application from the dropdown
 3. Type your message in the input field
 4. Press Enter or click Send
+
+When a response is grounded in your documents, a **Sources** panel appears beneath the answer. Expand any source to preview the exact excerpt that was used, along with relevance scores and paragraph identifiers. If no supporting evidence exists, the assistant clearly states that it cannot answer.
 
 ### Streaming Responses
 

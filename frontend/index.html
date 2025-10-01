@@ -135,12 +135,29 @@
                 <h3 class="text-xl font-semibold mb-2 tracking-tight">RAGify</h3>
                 <p class="text-gray-400">Powered by AI & Vector Search</p>
                 <div class="mt-4 text-sm text-gray-500">
-                    Backend API: <a href="http://localhost:8000/docs" class="text-blue-400 hover:text-blue-300">http://localhost:8000/docs</a>
+                    Backend API: <a id="backend-docs-link" href="http://localhost:8000/docs" class="text-blue-400 hover:text-blue-300">http://localhost:8000/docs</a>
                 </div>
             </div>
         </div>
     </footer>
 
+    <script>
+        (function () {
+            const link = document.getElementById('backend-docs-link');
+            if (!link) return;
+            const { protocol, hostname, port } = window.location;
+            const portMapping = new Map([
+                ['5173', '8000'],
+                ['15173', '18000'],
+                ['', '8000'],
+                ['80', '18000'],
+            ]);
+            const targetPort = portMapping.get(port) || port || '8000';
+            const resolved = `${protocol}//${hostname}:${targetPort}/docs`;
+            link.href = resolved;
+            link.textContent = resolved;
+        })();
+    </script>
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>

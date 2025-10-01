@@ -12,6 +12,7 @@ from backend.modules.applications.crud import (
     get_application_knowledge_bases,
     create_chat_message,
     get_application_chat_history,
+    clear_chat_history,
 )
 from backend.modules.rag.rag_pipeline import streaming_rag_pipeline, RAGQuery
 
@@ -295,9 +296,12 @@ async def clear_conversation_history(
         if not application_data:
             raise HTTPException(status_code=404, detail="Application not found")
 
-        # In a real implementation, you'd delete chat messages
-        # For now, just return success
-        return {"message": "Conversation history cleared successfully"}
+        deleted_count = await clear_chat_history(db, application_id)
+
+        return {
+            "message": "Conversation history cleared successfully",
+            "deleted_count": deleted_count,
+        }
 
     except HTTPException:
         raise

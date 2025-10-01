@@ -86,6 +86,8 @@ app.add_middleware(
         "http://127.0.0.1:8501",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:15173",
+        "http://127.0.0.1:15173",
     ],  # Include new frontend port
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
