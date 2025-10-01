@@ -288,8 +288,11 @@
             document.getElementById('status').textContent = formatStatus(text);
         }
 
-        function addMessage(text, sender) {
+        function addMessage(text, sender, options = {}) {
             const messages = document.getElementById('messages');
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex flex-col ${sender === 'user' ? 'items-end' : 'items-start'} space-y-2`;
+
             const messageDiv = document.createElement('div');
             messageDiv.className = `chat-bubble ${sender}`;
 
@@ -299,9 +302,92 @@
                 messageDiv.innerHTML = `<p>${text}</p>`;
             }
 
-            messages.appendChild(messageDiv);
+            wrapper.appendChild(messageDiv);
+
+            if (sender === 'assistant') {
+                const { citations = [], confidenceScore, fallbackReason } = options;
+
+                if (fallbackReason) {
+                    const fallbackNotice = document.createElement('div');
+                    fallbackNotice.className = 'text-xs font-medium text-amber-700 bg-amber-100 border border-amber-200 rounded-lg px-3 py-2 shadow-sm';
+                    fallbackNotice.textContent = 'No supporting evidence found. The assistant could not locate matching knowledge base content.';
+                    wrapper.appendChild(fallbackNotice);
+                }
+
+                if (citations && citations.length > 0) {
+                    const citationCard = document.createElement('div');
+                    citationCard.className = 'w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-sm p-4 text-sm text-slate-700';
+
+                    const heading = document.createElement('div');
+                    heading.className = 'flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500';
+                    const headingLabel = document.createElement('span');
+                    headingLabel.textContent = 'Sources';
+                    heading.appendChild(headingLabel);
+
+                    if (typeof confidenceScore === 'number') {
+                        const confidenceBadge = document.createElement('span');
+                        confidenceBadge.className = 'text-[11px] font-medium text-slate-500';
+                        confidenceBadge.textContent = `Confidence ${Math.round(confidenceScore * 100)}%`;
+                        heading.appendChild(confidenceBadge);
+                    }
+
+                    citationCard.appendChild(heading);
+
+                    citations.forEach((citation, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'mt-3 border border-slate-100 rounded-xl bg-slate-50/60 hover:bg-slate-50 transition-colors';
+
+                        const itemBody = document.createElement('div');
+                        itemBody.className = 'p-3';
+
+                        const title = document.createElement('div');
+                        title.className = 'text-sm font-semibold text-slate-700';
+                        title.textContent = citation.document_title || `Document ${index + 1}`;
+                        itemBody.appendChild(title);
+
+                        const meta = document.createElement('div');
+                        meta.className = 'mt-1 text-xs text-slate-500';
+                        const details = [];
+                        if (citation.paragraph_id) {
+                            details.push(`Paragraph ${citation.paragraph_id.slice(0, 8)}`);
+                        }
+                        if (typeof citation.score === 'number') {
+                            details.push(`Score ${(citation.score * 100).toFixed(1)}%`);
+                        }
+                        if (details.length > 0) {
+                            meta.textContent = details.join(' • ');
+                            itemBody.appendChild(meta);
+                        }
+
+
+                        if (citation.snippet) {
+                            const snippetDetails = document.createElement('details');
+                            snippetDetails.className = 'mt-2 text-slate-600 text-sm';
+                            const summary = document.createElement('summary');
+                            summary.className = 'cursor-pointer text-slate-500 font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-300 rounded';
+                            summary.textContent = 'View excerpt';
+                            snippetDetails.appendChild(summary);
+
+                            const snippet = document.createElement('p');
+                            snippet.className = 'mt-2 whitespace-pre-wrap text-slate-600';
+                            snippet.textContent = citation.snippet;
+                            snippetDetails.appendChild(snippet);
+
+                            itemBody.appendChild(snippetDetails);
+                        }
+
+                        item.appendChild(itemBody);
+                        citationCard.appendChild(item);
+                    });
+
+                    wrapper.appendChild(citationCard);
+                }
+            }
+
+            messages.appendChild(wrapper);
             messages.scrollTop = messages.scrollHeight;
         }
+
 
         async function sendMessage() {
             const input = document.getElementById('messageInput');
@@ -330,9 +416,16 @@
 
                 if (response.ok) {
                     const data = await response.json();
+                    const citations = data?.metadata?.citations || [];
+                    const confidenceScore = typeof data?.confidence_score === 'number'
+                        ? data.confidence_score
+                        : (typeof data?.metadata?.confidence_score === 'number' ? data.metadata.confidence_score : null);
+                    const fallbackReason = data?.metadata?.fallback_reason || null;
+
                     addMessage(
                         data.response || data.message || 'Response received',
-                        'assistant'
+                        'assistant',
+                        { citations, confidenceScore, fallbackReason }
                     );
 
                     const metadataModel = extractModelInfoFromMetadata(

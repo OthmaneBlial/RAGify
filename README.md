@@ -4,7 +4,7 @@
 
 ## ✨ Key Features
 
-- **🎯 Grounded Answers**: Uses retrieved document context; if evidence is missing the assistant clearly says it cannot answer
+- **🎯 Grounded Answers**: Uses retrieved document context, surfaces document sources, and clearly says it cannot answer when evidence is missing
 - **📚 Multiple Knowledge Bases**: Organize documents by topic, department, or project
 - **🤖 100+ AI Models**: Access OpenAI, Anthropic, Google, and more through OpenRouter
 - **⚡ Real-time Streaming**: Get responses as they're generated

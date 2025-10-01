@@ -107,6 +107,7 @@ class RAGPipeline:
                 "document_title": result.metadata.get("document_title"),
                 "paragraph_id": result.metadata.get("paragraph_id"),
                 "score": result.score,
+                "snippet": (result.content[:500] if result.content else None),
             }
             for result in context_results
         ]

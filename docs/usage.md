@@ -88,6 +88,8 @@ Fine-tune your application's behavior:
 3. Type your message in the input field
 4. Press Enter or click Send
 
+When a response is grounded in your documents, a **Sources** panel appears beneath the answer. Expand any source to preview the exact excerpt that was used, along with relevance scores and paragraph identifiers. If no supporting evidence exists, the assistant clearly states that it cannot answer.
+
 ### Streaming Responses
 
 RAGify supports real-time streaming:
