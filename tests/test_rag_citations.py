@@ -99,3 +99,26 @@ def test_no_citation_when_no_match(rag_pipeline):
     ], None, "Who won world cup 2024")
 
     assert citations == []
+
+
+def test_no_citation_when_disclaimer_answer(rag_pipeline):
+    unrelated_context = RetrievalResult(
+        content="Club honors and domestic trophies",
+        score=0.5,
+        metadata={
+            "document_id": "doc-2",
+            "document_title": "file.txt",
+            "paragraph_id": "para-honors",
+            "knowledge_base_id": "kb-1",
+            "paragraph_excerpt": "Club honors and domestic trophies",
+        },
+        source="file.txt",
+    )
+
+    citations = rag_pipeline._build_citations(
+        [unrelated_context],
+        "The provided context does not contain information about the 2022 FIFA World Cup winner.",
+        "Who won world cup 2022?",
+    )
+
+    assert citations == []

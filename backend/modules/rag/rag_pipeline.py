@@ -114,9 +114,7 @@ class RAGPipeline:
                 "I'm sorry, but I couldn't find enough information in the knowledge bases to answer that. "
                 "Please upload relevant documents or clarify your question."
             )
-            citations = self._build_citations(
-                context_results, None, rag_query.text
-            )
+            citations: List[Dict[str, Any]] = []
             return RAGResponse(
                 answer=fallback_text,
                 context=context_results,
@@ -201,6 +199,20 @@ class RAGPipeline:
     ) -> List[Dict[str, Any]]:
         if not context_results:
             return []
+
+        if answer_text:
+            normalized_answer = answer_text.lower()
+            disclaimer_phrases = [
+                "does not contain",
+                "could not find",
+                "not enough information",
+                "insufficient information",
+                "no information available",
+                "unable to find",
+                "not provided in the context",
+            ]
+            if any(phrase in normalized_answer for phrase in disclaimer_phrases):
+                return []
 
         highlight_terms = self._gather_highlight_terms(answer_text, query_text)
 
