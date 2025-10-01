@@ -93,7 +93,9 @@ class RAGPipeline:
         query_embedding = await encode_text(rag_query.text)
 
         # Step 2: Retrieve relevant context
-        context_results = await self._retrieve_context(rag_query, db)
+        context_results = await self._retrieve_context(
+            rag_query, db, query_embedding
+        )
 
         # Step 3: Construct prompt with retrieved context
         prompt = await self._construct_prompt(rag_query, context_results)
@@ -128,6 +130,7 @@ class RAGPipeline:
                     "query_embedding_dimension": len(query_embedding),
                     "confidence_score": confidence_score,
                     "fallback_reason": "low_context_confidence",
+                    "is_fallback": True,
                     "citations": citations,
                 },
                 confidence_score=confidence_score,
@@ -138,8 +141,13 @@ class RAGPipeline:
             prompt, rag_query, application
         )
 
-        citations = self._build_citations(
-            context_results, response.text, rag_query.text
+        has_error = bool(response.metadata and response.metadata.get("error"))
+        citations = (
+            []
+            if has_error
+            else self._build_citations(
+                context_results, response.text, rag_query.text
+            )
         )
 
         model_metadata = {
@@ -196,30 +204,14 @@ class RAGPipeline:
         context_results: List[RetrievalResult],
         answer_text: Optional[str],
         query_text: Optional[str],
+        top_k: int = 3,
     ) -> List[Dict[str, Any]]:
         if not context_results:
             return []
 
-        if answer_text:
-            normalized_answer = answer_text.lower()
-            disclaimer_phrases = [
-                "does not contain",
-                "could not find",
-                "not enough information",
-                "insufficient information",
-                "no information available",
-                "unable to find",
-                "not provided in the context",
-            ]
-            if any(phrase in normalized_answer for phrase in disclaimer_phrases):
-                return []
-
         highlight_terms = self._gather_highlight_terms(answer_text, query_text)
 
-        best_result: Optional[RetrievalResult] = None
-        best_snippet = ""
-        best_term_score = -1.0
-
+        scored: List[Tuple[float, float, RetrievalResult, str]] = []
         for result in context_results:
             snippet_source = (
                 result.metadata.get("paragraph_excerpt")
@@ -231,29 +223,34 @@ class RAGPipeline:
             term_score = self._calculate_highlight_match_score(
                 snippet_source, highlight_terms
             )
+            scored.append((term_score, result.score, result, snippet_source))
 
-            if best_result is None or term_score > best_term_score or (
-                term_score == best_term_score and result.score > best_result.score
-            ):
-                best_result = result
-                best_snippet = snippet_source
-                best_term_score = term_score
-
-        if best_result is None or best_term_score <= 0:
+        if not scored:
             return []
 
-        formatted_snippet = self._format_snippet(best_snippet, highlight_terms)
+        scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        positives = [t for t in scored if t[0] > 0]
+        chosen = positives[:top_k] if positives else scored[: min(top_k, len(scored))]
 
-        return [
-            {
-                "document_id": best_result.metadata.get("document_id"),
-                "document_title": best_result.metadata.get("document_title"),
-                "paragraph_id": best_result.metadata.get("paragraph_id"),
-                "knowledge_base_id": best_result.metadata.get("knowledge_base_id"),
-                "score": best_result.score,
-                "snippet": formatted_snippet,
-            }
-        ]
+        citations: List[Dict[str, Any]] = []
+        for term_score, _, res, src in chosen:
+            snippet = (
+                self._format_snippet(src, highlight_terms)
+                if term_score > 0
+                else self._slice_snippet(src, [], 320)
+            )
+            citations.append(
+                {
+                    "document_id": res.metadata.get("document_id"),
+                    "document_title": res.metadata.get("document_title"),
+                    "paragraph_id": res.metadata.get("paragraph_id"),
+                    "knowledge_base_id": res.metadata.get("knowledge_base_id"),
+                    "score": res.score,
+                    "snippet": snippet,
+                }
+            )
+
+        return citations
 
     @staticmethod
     def _format_snippet(
@@ -582,7 +579,10 @@ class RAGPipeline:
         return base
 
     async def _retrieve_context(
-        self, query: RAGQuery, db: AsyncSession
+        self,
+        query: RAGQuery,
+        db: AsyncSession,
+        query_vector: Optional[List[float]] = None,
     ) -> List[RetrievalResult]:
         """
         Retrieve relevant context for the query.
@@ -602,6 +602,7 @@ class RAGPipeline:
             application_id=query.application_id,
             context_window=query.max_context_length // 4,  # Reserve space for prompt
             search_type=query.search_type,
+            query_vector=query_vector,
         )
 
         # Filter and rank results
@@ -760,13 +761,21 @@ Answer:"""
         # - Average similarity score
         # - Score distribution
 
-        avg_score = sum(result.score for result in context) / len(context)
-        result_count_factor = min(
-            len(context) / 5.0, 1.0
-        )  # Max confidence at 5+ results
+        scores = sorted((r.score for r in context), reverse=True)
+        avg_score = sum(scores) / len(scores)
+        top = scores[0]
+        margin = (top - scores[1]) if len(scores) > 1 else top
+        result_count_factor = min(len(context) / 5.0, 1.0)
 
-        # Weight the factors
-        confidence = (avg_score * 0.7) + (result_count_factor * 0.3)
+        max_score = top if top > 0 else 1.0
+        normalized_avg = avg_score / max_score
+        normalized_margin = margin / max_score
+
+        confidence = (
+            (0.55 * normalized_avg)
+            + (0.25 * result_count_factor)
+            + (0.20 * normalized_margin)
+        )
 
         return min(confidence, 1.0)
 
