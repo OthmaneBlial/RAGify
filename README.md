@@ -4,7 +4,7 @@
 
 ## ✨ Key Features
 
-- **🎯 Accurate Answers**: Never hallucinates - responses are grounded in your uploaded documents
+- **🎯 Grounded Answers**: Uses retrieved document context; if evidence is missing the assistant clearly says it cannot answer
 - **📚 Multiple Knowledge Bases**: Organize documents by topic, department, or project
 - **🤖 100+ AI Models**: Access OpenAI, Anthropic, Google, and more through OpenRouter
 - **⚡ Real-time Streaming**: Get responses as they're generated

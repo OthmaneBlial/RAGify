@@ -15,6 +15,10 @@ from backend.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+LOW_CONFIDENCE_THRESHOLD = 0.35
+MIN_CONTEXT_RESULTS_FOR_CONFIDENCE = 1
+
+
 @dataclass
 class RAGQuery:
     """Query object for RAG processing."""
@@ -94,13 +98,54 @@ class RAGPipeline:
         # Step 3: Construct prompt with retrieved context
         prompt = await self._construct_prompt(rag_query, context_results)
 
+        # Evaluate confidence before calling the model
+        confidence_score = self._calculate_confidence_score(context_results)
+
+        citations = [
+            {
+                "document_id": result.metadata.get("document_id"),
+                "document_title": result.metadata.get("document_title"),
+                "paragraph_id": result.metadata.get("paragraph_id"),
+                "score": result.score,
+            }
+            for result in context_results
+        ]
+
+        if (
+            confidence_score < LOW_CONFIDENCE_THRESHOLD
+            or len(context_results) < MIN_CONTEXT_RESULTS_FOR_CONFIDENCE
+        ):
+            logger.info(
+                "Low confidence (score=%.3f, contexts=%d); returning fallback response.",
+                confidence_score,
+                len(context_results),
+            )
+            fallback_text = (
+                "I'm sorry, but I couldn't find enough information in the knowledge bases to answer that. "
+                "Please upload relevant documents or clarify your question."
+            )
+            return RAGResponse(
+                answer=fallback_text,
+                context=context_results,
+                metadata={
+                    "query_text": rag_query.text,
+                    "context_count": len(context_results),
+                    "search_type": rag_query.search_type,
+                    "application_id": (
+                        str(rag_query.application_id) if rag_query.application_id else None
+                    ),
+                    "query_embedding_dimension": len(query_embedding),
+                    "confidence_score": confidence_score,
+                    "fallback_reason": "low_context_confidence",
+                    "citations": citations,
+                },
+                confidence_score=confidence_score,
+            )
+
         # Step 4: Generate response
         response, provider_type, model_name = await self._generate_response(
             prompt, rag_query, application
         )
-
-        # Calculate confidence score based on retrieval results
-        confidence_score = self._calculate_confidence_score(context_results)
 
         model_metadata = {
             "provider": provider_type.value if provider_type else None,
@@ -144,6 +189,8 @@ class RAGPipeline:
                     str(rag_query.application_id) if rag_query.application_id else None
                 ),
                 "query_embedding_dimension": len(query_embedding),
+                "confidence_score": confidence_score,
+                "citations": citations,
                 **model_metadata,
             },
             confidence_score=confidence_score,
@@ -379,6 +426,23 @@ class StreamingRAGPipeline(RAGPipeline):
         prompt = await self._construct_prompt(rag_query, context_results)
 
         # Step 4: Generate streaming response
+        confidence_score = self._calculate_confidence_score(context_results)
+        if (
+            confidence_score < LOW_CONFIDENCE_THRESHOLD
+            or len(context_results) < MIN_CONTEXT_RESULTS_FOR_CONFIDENCE
+        ):
+            fallback_text = (
+                "I'm sorry, but I couldn't find enough information in the knowledge bases to answer that. "
+                "Please upload relevant documents or clarify your question."
+            )
+            logger.info(
+                "Streaming fallback due to low confidence (score=%.3f, contexts=%d).",
+                confidence_score,
+                len(context_results),
+            )
+            yield fallback_text
+            return
+
         async for chunk in self._generate_streaming_response(
             prompt, rag_query, application
         ):
