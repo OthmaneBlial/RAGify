@@ -158,3 +158,5 @@ bin/
 *.temp
 
 
+coverage.xml
+dist/
