@@ -119,7 +119,7 @@ MAX_UPLOAD_SIZE=100MB
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 
 # CORS Settings
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:15173,http://localhost:3000
 
 # Rate Limiting
 RATE_LIMIT_REQUESTS=100
@@ -190,6 +190,30 @@ You can specify any supported model in your application configuration using the 
 
 ## Running the Application
 
+### Docker Quick Start (Optional)
+
+If you prefer containers, the project ships with a helper script that builds a reusable base image and launches the full stack (backend, frontend, PostgreSQL with pgvector, and Redis).
+
+```bash
+# Build or refresh the dependency base image and start all services
+./startupdocker.sh --build
+
+# Follow logs during startup (optional)
+./startupdocker.sh --build --logs
+
+# Stop the containers when you're done
+./startupdocker.sh --down
+```
+
+The Docker stack publishes the following ports on the host:
+
+- Backend API: `http://localhost:18000`
+- Frontend UI: `http://localhost:15173`
+- PostgreSQL: `localhost:15432` (user/password `ragify` / `RagifyStrongPass2023`)
+- Redis: `localhost:16379`
+
+The first `--build` run creates the `ragify-backend-base` image that caches all heavy Python dependencies such as PyTorch and transformers. Subsequent builds reuse that base layer, so only application code changes trigger rebuilds. Environment variables are loaded from the project’s `.env` file inside the containers.
+
 ### Development Mode
 
 ```bash
@@ -236,7 +260,7 @@ Visit: http://localhost:8000/docs
 
 ### 3. Frontend Interface
 
-Visit: http://localhost:5173
+Visit: `http://localhost:5173` (local dev) or `http://localhost:15173` when using the Docker stack.
 
 ## Troubleshooting
 

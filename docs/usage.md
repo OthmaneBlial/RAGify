@@ -4,7 +4,7 @@ This guide provides step-by-step instructions for using RAGify to create knowled
 
 ## Getting Started
 
-After [setting up](setup.md) RAGify, access the web interface at `http://localhost:5173`.
+After [setting up](setup.md) RAGify, access the web interface at `http://localhost:5173` for local development, or `http://localhost:15173` if you started the Docker stack.
 
 The interface consists of three main sections:
 
