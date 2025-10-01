@@ -370,7 +370,9 @@
 
                             const snippet = document.createElement('p');
                             snippet.className = 'mt-2 whitespace-pre-wrap text-slate-600';
-                            snippet.textContent = citation.snippet;
+                            if (citation.snippet) {
+                                snippet.innerHTML = citation.snippet;
+                            }
                             snippetDetails.appendChild(snippet);
 
                             itemBody.appendChild(snippetDetails);

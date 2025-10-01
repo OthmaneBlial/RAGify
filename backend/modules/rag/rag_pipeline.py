@@ -101,17 +101,6 @@ class RAGPipeline:
         # Evaluate confidence before calling the model
         confidence_score = self._calculate_confidence_score(context_results)
 
-        citations = [
-            {
-                "document_id": result.metadata.get("document_id"),
-                "document_title": result.metadata.get("document_title"),
-                "paragraph_id": result.metadata.get("paragraph_id"),
-                "score": result.score,
-                "snippet": (result.content[:500] if result.content else None),
-            }
-            for result in context_results
-        ]
-
         if (
             confidence_score < LOW_CONFIDENCE_THRESHOLD
             or len(context_results) < MIN_CONTEXT_RESULTS_FOR_CONFIDENCE
@@ -124,6 +113,9 @@ class RAGPipeline:
             fallback_text = (
                 "I'm sorry, but I couldn't find enough information in the knowledge bases to answer that. "
                 "Please upload relevant documents or clarify your question."
+            )
+            citations = self._build_citations(
+                context_results, None, rag_query.text
             )
             return RAGResponse(
                 answer=fallback_text,
@@ -146,6 +138,10 @@ class RAGPipeline:
         # Step 4: Generate response
         response, provider_type, model_name = await self._generate_response(
             prompt, rag_query, application
+        )
+
+        citations = self._build_citations(
+            context_results, response.text, rag_query.text
         )
 
         model_metadata = {
@@ -196,6 +192,382 @@ class RAGPipeline:
             },
             confidence_score=confidence_score,
         )
+
+    def _build_citations(
+        self,
+        context_results: List[RetrievalResult],
+        answer_text: Optional[str],
+        query_text: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        if not context_results:
+            return []
+
+        highlight_terms = self._gather_highlight_terms(answer_text, query_text)
+
+        best_result: Optional[RetrievalResult] = None
+        best_snippet = ""
+        best_term_score = -1.0
+
+        for result in context_results:
+            snippet_source = (
+                result.metadata.get("paragraph_excerpt")
+                or result.metadata.get("paragraph_content")
+                or result.content
+                or ""
+            )
+
+            term_score = self._calculate_highlight_match_score(
+                snippet_source, highlight_terms
+            )
+
+            if best_result is None or term_score > best_term_score or (
+                term_score == best_term_score and result.score > best_result.score
+            ):
+                best_result = result
+                best_snippet = snippet_source
+                best_term_score = term_score
+
+        if best_result is None or best_term_score <= 0:
+            return []
+
+        formatted_snippet = self._format_snippet(best_snippet, highlight_terms)
+
+        return [
+            {
+                "document_id": best_result.metadata.get("document_id"),
+                "document_title": best_result.metadata.get("document_title"),
+                "paragraph_id": best_result.metadata.get("paragraph_id"),
+                "knowledge_base_id": best_result.metadata.get("knowledge_base_id"),
+                "score": best_result.score,
+                "snippet": formatted_snippet,
+            }
+        ]
+
+    @staticmethod
+    def _format_snippet(
+        snippet_source: Optional[str], highlight_terms: List[Dict[str, Any]]
+    ) -> str:
+        import re
+
+        if not snippet_source:
+            return ""
+
+        normalized = re.sub(r"\s+", " ", snippet_source).strip()
+        term_strings = [term["text"] for term in highlight_terms if term["text"]]
+
+        window = RAGPipeline._slice_snippet(normalized, term_strings)
+        return RAGPipeline._apply_highlight(window, term_strings)
+
+    @staticmethod
+    def _gather_highlight_terms(
+        answer_text: Optional[str], query_text: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        import re
+
+        stopwords = {
+            "the",
+            "and",
+            "have",
+            "with",
+            "that",
+            "this",
+            "from",
+            "will",
+            "your",
+            "been",
+            "into",
+            "more",
+            "about",
+            "than",
+            "when",
+            "what",
+            "where",
+            "which",
+            "whose",
+            "their",
+            "there",
+        }
+
+        term_map: Dict[str, Dict[str, Any]] = {}
+
+        def register(term: str, source: str, *, is_phrase: bool = False):
+            if not term:
+                return
+            clean = term.strip()
+            if not clean:
+                return
+            lower = clean.casefold()
+            if lower in stopwords and not is_phrase:
+                return
+            is_numeric = any(ch.isdigit() for ch in clean)
+            entry = term_map.get(lower)
+            weight = RAGPipeline._term_weight(
+                clean,
+                from_query=(source == "query"),
+                is_numeric=is_numeric,
+                is_phrase=is_phrase,
+            )
+            if entry:
+                entry["weight"] = max(entry["weight"], weight)
+                entry["from_query"] = entry["from_query"] or (source == "query")
+                entry["is_numeric"] = entry["is_numeric"] and is_numeric
+                entry["is_phrase"] = entry["is_phrase"] or is_phrase
+            else:
+                term_map[lower] = {
+                    "text": clean,
+                    "weight": weight,
+                    "from_query": source == "query",
+                    "is_numeric": is_numeric,
+                    "is_phrase": is_phrase,
+                }
+
+        def process_text(text: Optional[str], source: str):
+            if not text:
+                return
+
+            # Numbers
+            for match in re.findall(r"\d[\d,\.]*", text):
+                register(match, source)
+
+            # Words
+            words = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'\-]{1,}", text)
+            filtered_words: List[str] = []
+            for word in words:
+                lower = word.casefold()
+                if len(lower) < 4 and not any(ch.isdigit() for ch in word):
+                    continue
+                if lower in stopwords:
+                    continue
+                register(word, source)
+                filtered_words.append(word)
+
+            if source == "query" and filtered_words:
+                for i in range(len(filtered_words) - 1):
+                    first = filtered_words[i]
+                    second = filtered_words[i + 1]
+                    if not first or not second:
+                        continue
+                    phrase = f"{first} {second}"
+                    register(phrase, source, is_phrase=True)
+
+        process_text(answer_text, "answer")
+        process_text(query_text, "query")
+
+        return list(term_map.values())
+
+    @staticmethod
+    def _slice_snippet(text: str, terms: List[str], max_length: int = 320) -> str:
+        if len(text) <= max_length:
+            return text
+
+        import re
+
+        lower_text = text.casefold()
+        accentless_text, index_map = RAGPipeline._build_accent_map(text)
+        accentless_lower = accentless_text.casefold()
+
+        for term in terms:
+            if not term:
+                continue
+            term_lower = term.casefold()
+            match = re.search(re.escape(term_lower), lower_text)
+            start_index = None
+            if match:
+                start_index = match.start()
+            else:
+                accentless_term = RAGPipeline._remove_accents(term).casefold()
+                if accentless_term:
+                    match = re.search(
+                        re.escape(accentless_term), accentless_lower
+                    )
+                    if match:
+                        start_index = index_map[match.start()][0]
+
+            if start_index is not None:
+                half = max_length // 2
+                start = max(0, start_index - half)
+                end = min(len(text), start + max_length)
+                if end - start < max_length:
+                    start = max(0, end - max_length)
+                snippet = text[start:end]
+                prefix = "..." if start > 0 else ""
+                suffix = "..." if end < len(text) else ""
+                return f"{prefix}{snippet}{suffix}"
+
+        return text[:max_length] + ("..." if len(text) > max_length else "")
+
+    @staticmethod
+    def _apply_highlight(text: str, terms: List[str]) -> str:
+        from html import escape
+        import re
+
+        if not text:
+            return ""
+
+        matches: List[Tuple[int, int]] = []
+
+        lower_text = text.casefold()
+        for term in terms:
+            if not term:
+                continue
+            term_lower = term.casefold()
+            if not term_lower:
+                continue
+            for match in re.finditer(re.escape(term_lower), lower_text):
+                matches.append((match.start(), match.start() + len(match.group(0))))
+
+        accentless_text, index_map = RAGPipeline._build_accent_map(text)
+        accentless_lower = accentless_text.casefold()
+        for term in terms:
+            if not term:
+                continue
+            accentless_term = RAGPipeline._remove_accents(term).casefold()
+            if not accentless_term:
+                continue
+            for match in re.finditer(re.escape(accentless_term), accentless_lower):
+                start_idx = index_map[match.start()][0]
+                end_idx = index_map[match.end() - 1][1]
+                matches.append((start_idx, end_idx))
+
+        if not matches:
+            return escape(text)
+
+        matches.sort()
+        merged: List[Tuple[int, int]] = []
+        for start, end in matches:
+            if not merged or start > merged[-1][1]:
+                merged.append((start, end))
+            else:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+
+        result_parts: List[str] = []
+        cursor = 0
+        for start, end in merged:
+            if start < cursor:
+                continue
+            result_parts.append(escape(text[cursor:start]))
+            result_parts.append("<mark>")
+            result_parts.append(escape(text[start:end]))
+            result_parts.append("</mark>")
+            cursor = end
+
+        result_parts.append(escape(text[cursor:]))
+        return "".join(result_parts)
+
+    @staticmethod
+    def _remove_accents(text: str) -> str:
+        import unicodedata
+
+        return "".join(
+            ch for ch in unicodedata.normalize("NFKD", text) if not unicodedata.combining(ch)
+        )
+
+    @staticmethod
+    def _build_accent_map(text: str) -> Tuple[str, List[Tuple[int, int]]]:
+        import unicodedata
+
+        simple_chars: List[str] = []
+        index_map: List[Tuple[int, int]] = []
+
+        for idx, char in enumerate(text):
+            normalized = unicodedata.normalize("NFKD", char)
+            stripped = "".join(
+                c for c in normalized if not unicodedata.combining(c)
+            )
+            if stripped:
+                for _ in stripped:
+                    simple_chars.append(_)
+                    index_map.append((idx, idx + 1))
+            else:
+                simple_chars.append(char)
+                index_map.append((idx, idx + 1))
+
+        return "".join(simple_chars), index_map
+
+    @staticmethod
+    def _calculate_highlight_match_score(
+        snippet_source: str, highlight_terms: List[Dict[str, Any]]
+    ) -> float:
+        if not snippet_source:
+            return 0.0
+
+        score = 0.0
+        query_hits = 0
+        total_hits = 0
+        query_terms_available = any(
+            not term["is_numeric"] and term["from_query"] for term in highlight_terms
+        )
+
+        for term in highlight_terms:
+            text = term["text"]
+            if not text:
+                continue
+            if RAGPipeline._contains_term(snippet_source, text):
+                total_hits += 1
+                score += term["weight"]
+                if term["from_query"] and not term["is_numeric"]:
+                    query_hits += 1
+
+        if total_hits == 0:
+            return 0.0
+
+        if query_terms_available and query_hits == 0:
+            score *= 0.2
+
+        return score
+
+    @staticmethod
+    def _contains_term(snippet: str, term: str) -> bool:
+        if not term:
+            return False
+
+        import re
+
+        def _match(text: str, pattern: str) -> bool:
+            try:
+                return re.search(pattern, text) is not None
+            except re.error:
+                return pattern.casefold() in text
+
+        def _pattern_for(t: str, numeric: bool, phrase: bool) -> str:
+            escaped = re.escape(t)
+            if numeric:
+                return rf"(?<!\d){escaped}(?!\d)"
+            if phrase or " " in t:
+                return rf"\b{escaped}\b"
+            return rf"\b{escaped}\b"
+
+        is_numeric = any(ch.isdigit() for ch in term)
+        is_phrase = " " in term
+
+        lower_snippet = snippet.casefold()
+        pattern = _pattern_for(term.casefold(), is_numeric, is_phrase)
+        if _match(lower_snippet, pattern):
+            return True
+
+        accentless_snippet = RAGPipeline._remove_accents(snippet).casefold()
+        accentless_term = RAGPipeline._remove_accents(term).casefold()
+        if accentless_term:
+            pattern_acc = _pattern_for(accentless_term, is_numeric, is_phrase)
+            if _match(accentless_snippet, pattern_acc):
+                return True
+
+        return False
+
+    @staticmethod
+    def _term_weight(
+        term: str, *, from_query: bool, is_numeric: bool, is_phrase: bool
+    ) -> float:
+        base = float(max(len(term.strip()), 1))
+        if is_numeric:
+            base *= 2.5
+        if is_phrase:
+            base += 2.0
+        if from_query:
+            base *= 2.0
+        if term and term[0].isupper():
+            base *= 1.3
+        return base
 
     async def _retrieve_context(
         self, query: RAGQuery, db: AsyncSession

@@ -114,6 +114,7 @@ class RetrievalService:
                     "document_id": str(result["document_id"]),
                     "document_title": result["document_title"],
                     "knowledge_base_id": str(result["knowledge_base_id"]),
+                    "paragraph_excerpt": result.get("paragraph_content"),
                 },
                 source=result["document_title"],
             )
@@ -191,6 +192,7 @@ class RetrievalService:
                     "document_id": str(row.document_id),
                     "document_title": row.document_title,
                     "knowledge_base_id": str(row.knowledge_base_id),
+                    "paragraph_excerpt": row.paragraph_content,
                 },
                 source=row.document_title,
             )
