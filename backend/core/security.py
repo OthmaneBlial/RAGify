@@ -15,24 +15,36 @@ def _patch_passlib_bcrypt_wrap_detection() -> None:
     if getattr(passlib_bcrypt, patch_flag, False):
         return
 
+    # Patch detect_wrap_bug
     original_detect = getattr(passlib_bcrypt, "detect_wrap_bug", None)
-    if original_detect is None:
-        setattr(passlib_bcrypt, patch_flag, True)
-        return
+    if original_detect is not None:
+        def detect_wrap_bug_safe(ident: bytes) -> bool:  # type: ignore[override]
+            try:
+                return original_detect(ident)
+            except ValueError as exc:
+                message = str(exc).lower()
+                if "password cannot be longer than 72 bytes" in message:
+                    # Newer versions of the bcrypt backend raise instead of truncating
+                    # long passwords during passlib's safety probe. Treat this as
+                    # "no wrap bug" so hashing can proceed normally.
+                    return False
+                raise
 
-    def detect_wrap_bug_safe(ident: bytes) -> bool:  # type: ignore[override]
-        try:
-            return original_detect(ident)
-        except ValueError as exc:
-            message = str(exc).lower()
-            if "password cannot be longer than 72 bytes" in message:
-                # Newer versions of the bcrypt backend raise instead of truncating
-                # long passwords during passlib's safety probe. Treat this as
-                # "no wrap bug" so hashing can proceed normally.
-                return False
-            raise
+        passlib_bcrypt.detect_wrap_bug = detect_wrap_bug_safe  # type: ignore[assignment]
 
-    passlib_bcrypt.detect_wrap_bug = detect_wrap_bug_safe  # type: ignore[assignment]
+    # Patch _calc_checksum to truncate long passwords
+    backend_class = getattr(passlib_bcrypt, "_BcryptBackend", None)
+    if backend_class is not None:
+        original_calc_checksum = getattr(backend_class, "_calc_checksum", None)
+        if original_calc_checksum is not None:
+            def calc_checksum_safe(self, secret):
+                # Truncate secret to 72 bytes if longer
+                if isinstance(secret, bytes) and len(secret) > 72:
+                    secret = secret[:72]
+                return original_calc_checksum(self, secret)
+
+            backend_class._calc_checksum = calc_checksum_safe  # type: ignore[assignment]
+
     setattr(passlib_bcrypt, patch_flag, True)
 
 
