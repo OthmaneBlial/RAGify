@@ -320,7 +320,7 @@ async def update_application_model_config(
     Returns:
         Updated application or None
     """
-    return await update_application(db, application_id, model_config=model_config)
+    return await update_application(db, application_id, config=model_config)
 
 
 async def update_application_knowledge_bases(

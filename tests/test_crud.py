@@ -278,6 +278,27 @@ class TestApplicationCRUD:
         assert app_data["config"]["model_config"]["model"] == "gpt-4"
 
     @pytest.mark.asyncio
+    async def test_update_application_model_config_helper(self, db_session):
+        """Test helper that updates application model config"""
+        app = await create_application(
+            db=db_session,
+            name="Helper Test App",
+            config={"model": "gpt-3.5-turbo", "max_tokens": 500}
+        )
+
+        updated = await update_application_model_config(
+            db_session,
+            app.id,
+            {"model": "gpt-4", "max_tokens": 800}
+        )
+
+        assert updated is not None
+
+        app_data = await get_application_with_config(db_session, app.id)
+        assert app_data["config"]["model_config"]["model"] == "gpt-4"
+        assert app_data["config"]["model_config"]["max_tokens"] == 800
+
+    @pytest.mark.asyncio
     async def test_update_application_knowledge_bases(self, db_session):
         """Test updating application knowledge bases"""
         app = await create_application(
