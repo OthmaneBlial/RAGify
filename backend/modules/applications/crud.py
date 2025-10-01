@@ -411,3 +411,12 @@ async def get_application_chat_history(
         }
         for msg in messages
     ]
+
+
+async def clear_chat_history(db: AsyncSession, application_id: UUID) -> int:
+    """Delete all chat messages for an application and return removed count."""
+    result = await db.execute(
+        delete(ChatMessage).where(ChatMessage.application_id == application_id)
+    )
+    await db.commit()
+    return result.rowcount or 0

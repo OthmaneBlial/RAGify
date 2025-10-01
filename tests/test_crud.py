@@ -20,6 +20,7 @@ from backend.modules.applications.crud import (
     update_application_knowledge_bases,
     create_chat_message,
     get_application_chat_history,
+    clear_chat_history,
 )
 
 from backend.modules.knowledge.crud import (
@@ -297,6 +298,21 @@ class TestApplicationCRUD:
         app_data = await get_application_with_config(db_session, app.id)
         assert app_data["config"]["model_config"]["model"] == "gpt-4"
         assert app_data["config"]["model_config"]["max_tokens"] == 800
+
+    @pytest.mark.asyncio
+    async def test_clear_chat_history_helper(self, db_session):
+        """Chat history helper removes messages and reports count"""
+        app = await create_application(db_session, "Helper Chat App")
+
+        # Seed chat messages
+        await create_chat_message(db_session, app.id, "Msg 1", "Reply 1")
+        await create_chat_message(db_session, app.id, "Msg 2", "Reply 2")
+
+        deleted = await clear_chat_history(db_session, app.id)
+        assert deleted == 2
+
+        history = await get_application_chat_history(db_session, app.id)
+        assert history == []
 
     @pytest.mark.asyncio
     async def test_update_application_knowledge_bases(self, db_session):
