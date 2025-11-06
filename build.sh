@@ -3,8 +3,16 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMP_ENV_FILE=""
 
-trap 'echo "❌ Build or deployment failed. Review the logs above."; exit 1' ERR
+cleanup() {
+  if [[ -n "${TEMP_ENV_FILE}" && -f "${TEMP_ENV_FILE}" ]]; then
+    rm -f "${TEMP_ENV_FILE}"
+  fi
+}
+
+trap 'cleanup; echo "❌ Build or deployment failed. Review the logs above."; exit 1' ERR
+trap 'cleanup' EXIT
 
 require_command() {
   local cmd=$1
@@ -33,50 +41,32 @@ CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-1}"
 CLOUD_RUN_ENV_VARS="${CLOUD_RUN_ENV_VARS:-}"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
 IMAGE_URI="gcr.io/${PROJECT_ID}/${IMAGE_NAME}"
+BASE_IMAGE_NAME="${BASE_IMAGE_NAME:-ragify-backend-base}"
+BASE_IMAGE_URI="${BASE_IMAGE_URI:-gcr.io/${PROJECT_ID}/${BASE_IMAGE_NAME}:latest}"
+BUILD_BASE_IMAGE="${BUILD_BASE_IMAGE:-auto}"
 
-load_env_file() {
-  local env_file=$1
-  local env_pairs=()
-
-  if [[ ! -f "$env_file" ]]; then
-    return 0
-  fi
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    # Trim whitespace
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-    [[ -z "$line" || "$line" =~ ^# ]] && continue
-
-    if [[ "$line" == *"="* ]]; then
-      key="${line%%=*}"
-      value="${line#*=}"
-      key="$(echo -n "$key" | xargs)"
-      value="$(echo -n "$value" | xargs)"
-      env_pairs+=("${key}=${value}")
-    fi
-  done < "$env_file"
-
-  local joined=""
-  for pair in "${env_pairs[@]}"; do
-    if [[ -z "$joined" ]]; then
-      joined="$pair"
-    else
-      joined="${joined},${pair}"
-    fi
-  done
-
-  echo "$joined"
-}
-
-if [[ -z "$CLOUD_RUN_ENV_VARS" ]]; then
-  if [[ -f "$ENV_FILE" ]]; then
-    echo "📄 Loading environment variables from ${ENV_FILE}"
-    CLOUD_RUN_ENV_VARS="$(load_env_file "$ENV_FILE")"
-  fi
+if [[ -z "$CLOUD_RUN_ENV_VARS" && -f "$ENV_FILE" ]]; then
+  echo "📄 Loading environment variables from ${ENV_FILE}"
+  TEMP_ENV_FILE="$(mktemp)"
+  python <<'PY' "$ENV_FILE" "$TEMP_ENV_FILE"
+import json, pathlib, sys
+env_path = pathlib.Path(sys.argv[1])
+out_path = pathlib.Path(sys.argv[2])
+data = {}
+for raw_line in env_path.read_text().splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if key:
+        data[key] = value
+out_path.write_text(json.dumps(data))
+PY
 fi
 
-if [[ -z "$CLOUD_RUN_ENV_VARS" ]]; then
+if [[ -z "$CLOUD_RUN_ENV_VARS" && ( -z "${TEMP_ENV_FILE}" || ! -s "${TEMP_ENV_FILE}" ) ]]; then
   echo "❌ No Cloud Run environment variables found."
   echo "   Set CLOUD_RUN_ENV_VARS explicitly or provide an ENV_FILE (.env) with key=value pairs."
   exit 1
@@ -85,11 +75,27 @@ fi
 ensure_env_var() {
   local key=$1
   local value=$2
-  if ! echo "$CLOUD_RUN_ENV_VARS" | tr ',' '\n' | grep -q "^${key}="; then
-    if [[ -n "$CLOUD_RUN_ENV_VARS" ]]; then
-      CLOUD_RUN_ENV_VARS+=","
+  if [[ -n "${TEMP_ENV_FILE}" ]]; then
+    python <<'PY' "${TEMP_ENV_FILE}" "${key}" "${value}"
+import json, sys
+path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    with open(path) as fh:
+        data = json.load(fh)
+except (FileNotFoundError, json.JSONDecodeError):
+    data = {}
+if key not in data:
+    data[key] = value
+with open(path, "w") as fh:
+    json.dump(data, fh)
+PY
+  else
+    if ! echo "$CLOUD_RUN_ENV_VARS" | tr ',' '\n' | grep -q "^${key}="; then
+      if [[ -n "$CLOUD_RUN_ENV_VARS" ]]; then
+        CLOUD_RUN_ENV_VARS+=","
+      fi
+      CLOUD_RUN_ENV_VARS+="${key}=${value}"
     fi
-    CLOUD_RUN_ENV_VARS+="${key}=${value}"
   fi
 }
 
@@ -119,19 +125,53 @@ echo "🔍 Ensuring Cloud Build and Cloud Run APIs are enabled..."
 ensure_api_enabled cloudbuild.googleapis.com
 ensure_api_enabled run.googleapis.com
 
+base_image_exists() {
+  gcloud container images describe "${BASE_IMAGE_URI}" >/dev/null 2>&1
+}
+
+maybe_build_base_image() {
+  if [[ "${BUILD_BASE_IMAGE}" == "never" ]]; then
+    echo "⚠️  Skipping base image build (BUILD_BASE_IMAGE=never)."
+    return
+  fi
+
+  if [[ "${BUILD_BASE_IMAGE}" != "always" ]] && base_image_exists; then
+    echo "ℹ️  Using existing base image ${BASE_IMAGE_URI}."
+    return
+  fi
+
+  echo "🧱 Building base image ${BASE_IMAGE_URI}..."
+  gcloud builds submit "${ROOT_DIR}" \
+    --tag "${BASE_IMAGE_URI}" \
+    --file "${ROOT_DIR}/docker/backend-base.Dockerfile"
+}
+
+maybe_build_base_image
+
 echo "🏗️  Building and pushing image ${IMAGE_URI}..."
-gcloud builds submit "${ROOT_DIR}" --tag "${IMAGE_URI}"
+gcloud builds submit "${ROOT_DIR}" \
+  --tag "${IMAGE_URI}" \
+  --build-arg "BASE_IMAGE=${BASE_IMAGE_URI}"
 
 echo "🚀 Deploying ${SERVICE_NAME} to Cloud Run (${REGION})..."
-gcloud run deploy "${SERVICE_NAME}" \
-  --image "${IMAGE_URI}" \
-  --platform managed \
-  --region "${REGION}" \
-  --allow-unauthenticated \
-  --port "${CLOUD_RUN_PORT}" \
-  --memory "${CLOUD_RUN_MEMORY}" \
-  --cpu "${CLOUD_RUN_CPU}" \
-  --set-env-vars "${CLOUD_RUN_ENV_VARS}"
+deploy_args=(
+  "${SERVICE_NAME}"
+  --image "${IMAGE_URI}"
+  --platform managed
+  --region "${REGION}"
+  --allow-unauthenticated
+  --port "${CLOUD_RUN_PORT}"
+  --memory "${CLOUD_RUN_MEMORY}"
+  --cpu "${CLOUD_RUN_CPU}"
+)
+
+if [[ -n "${TEMP_ENV_FILE}" ]]; then
+  deploy_args+=(--env-vars-file "${TEMP_ENV_FILE}")
+else
+  deploy_args+=(--set-env-vars "${CLOUD_RUN_ENV_VARS}")
+fi
+
+gcloud run deploy "${deploy_args[@]}"
 
 SERVICE_URL="$(gcloud run services describe "${SERVICE_NAME}" --region "${REGION}" --format="value(status.url)")"
 

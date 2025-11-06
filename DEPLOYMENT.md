@@ -20,6 +20,16 @@ Environment variables used during deployment:
 | `CLOUD_RUN_MEMORY` | Cloud Run memory limit | `2Gi` |
 | `CLOUD_RUN_CPU` | Cloud Run CPU allocation | `1` |
 | `CLOUD_RUN_ENV_VARS` | Comma-separated env vars passed to the service | Reads from `.env` if unset |
+| `BASE_IMAGE_NAME` | Name of the heavy dependency base image | `ragify-backend-base` |
+| `BUILD_BASE_IMAGE` | `auto`, `always`, or `never` for rebuilding the base | `auto` |
+
+### Base Image Workflow
+
+The heavy Python/ML stack lives in `docker/backend-base.Dockerfile`. Building it separately keeps the app image slim:
+
+- Locally, `startupdocker.sh` (and `run_local_stack.sh`) build `ragify-backend-base:latest` only when it is missing.
+- During deployment, `./build.sh` publishes `gcr.io/$PROJECT_ID/$BASE_IMAGE_NAME:latest` (once per change) before building the small application image that layers on top.
+- Override `BASE_IMAGE_NAME`, `BASE_IMAGE_URI`, or set `BUILD_BASE_IMAGE=never` if you already have a published base image you want to reuse.
 
 Add any runtime-specific secrets (e.g., `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`, `SECRET_KEY`) by extending `CLOUD_RUN_ENV_VARS`.
 
@@ -41,7 +51,7 @@ The container serves the FastAPI backend and (when `SERVE_FRONTEND_BUILD=true`) 
 
 ## Deploy to Cloud Run
 
-`build.sh` automates Cloud Build submission and Cloud Run deployment. It automatically loads key/value pairs from `.env` (or `ENV_FILE=path/to/file`) when `CLOUD_RUN_ENV_VARS` is not explicitly supplied:
+`build.sh` automates Cloud Build submission and Cloud Run deployment. It automatically loads key/value pairs from `.env` (or `ENV_FILE=path/to/file`) when `CLOUD_RUN_ENV_VARS` is not explicitly supplied. Those variables are written to a temporary JSON map and passed to `gcloud run deploy --env-vars-file`, so URLs and other values do not need manual escaping. The script also ensures the base image exists before building the lighter application layer:
 
 ```bash
 PROJECT_ID=my-project \
@@ -53,9 +63,10 @@ What the script does:
 
 1. Verifies `gcloud` availability and authentication.
 2. Ensures `cloudbuild.googleapis.com` and `run.googleapis.com` are enabled.
-3. Builds the Docker image with `gcloud builds submit` and pushes it to `gcr.io/${PROJECT_ID}/${IMAGE_NAME}`.
-4. Deploys the image to Cloud Run with the provided runtime configuration.
-5. Prints the public service URL plus health & status endpoints for quick validation.
+3. Builds/pushes the dependency base image (unless `BUILD_BASE_IMAGE=never` or it already exists).
+4. Builds the final Docker image with `gcloud builds submit --build-arg BASE_IMAGE=...` so only app layers change.
+5. Deploys to Cloud Run with the environment variables pulled from `.env`.
+6. Prints the public service URL plus health & status endpoints for quick validation.
 
 ## Verification Checklist
 
