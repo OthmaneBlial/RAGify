@@ -1,3 +1,5 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 sqlalchemy
@@ -23,3 +25,4 @@ alembic
 pytesseract
 Pillow
 pdf2image
+torch==2.4.1+cpu

@@ -1,0 +1,6 @@
+#!include:.dockerignore
+
+# Cloud Build specific artifacts
+.gcloudignore
+.gcloud/
+*.log
