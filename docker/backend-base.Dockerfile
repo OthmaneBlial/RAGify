@@ -15,8 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 
 COPY requirements-docker.txt ./
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip \
+RUN pip install --upgrade pip \
  && pip wheel --wheel-dir /wheels -r requirements-docker.txt
 
 FROM python:3.12-slim AS runtime

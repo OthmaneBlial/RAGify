@@ -18,7 +18,18 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 echo "🐳 Building image '${IMAGE_NAME}' from ${DOCKERFILE}..."
-docker build -t "${IMAGE_NAME}" -f "${DOCKERFILE}" "${BUILD_CONTEXT}"
+
+build_args=(
+  "-t" "${IMAGE_NAME}"
+  "-f" "${DOCKERFILE}"
+  "--build-arg" "BUILDKIT_INLINE_CACHE=1"
+)
+
+if docker image inspect "${IMAGE_NAME}" >/dev/null 2>&1; then
+  build_args+=("--cache-from" "${IMAGE_NAME}")
+fi
+
+DOCKER_BUILDKIT=1 docker build "${build_args[@]}" "${BUILD_CONTEXT}"
 
 echo ""
 echo "✅ Image build complete."
