@@ -19,7 +19,8 @@ Environment variables used during deployment:
 | `CLOUD_RUN_PORT` | Container port exposed to Cloud Run | `8000` |
 | `CLOUD_RUN_MEMORY` | Cloud Run memory limit | `2Gi` |
 | `CLOUD_RUN_CPU` | Cloud Run CPU allocation | `1` |
-| `CLOUD_RUN_ENV_VARS` | Comma-separated env vars passed to the service | Reads from `.env` if unset |
+| `ENV_FILE` | Path to `.env` used for deployment overrides | `./.env` |
+| `SQLITE_DB_PATH` | Path (inside container) for the SQLite db file | `/tmp/ragify.db` |
 | `BASE_IMAGE_NAME` | Name of the heavy dependency base image | `ragify-backend-base` |
 | `BUILD_BASE_IMAGE` | `auto`, `always`, or `never` for rebuilding the base | `auto` |
 
@@ -31,7 +32,7 @@ The heavy Python/ML stack lives in `docker/backend-base.Dockerfile`. Building it
 - During deployment, `./build.sh` publishes `gcr.io/$PROJECT_ID/$BASE_IMAGE_NAME:latest` (once per change) before building the small application image that layers on top.
 - Override `BASE_IMAGE_NAME`, `BASE_IMAGE_URI`, or set `BUILD_BASE_IMAGE=never` if you already have a published base image you want to reuse.
 
-Add any runtime-specific secrets (e.g., `DATABASE_URL`, `REDIS_URL`, `OPENROUTER_API_KEY`, `SECRET_KEY`) by extending `CLOUD_RUN_ENV_VARS`.
+Add any runtime-specific secrets (e.g., `OPENROUTER_API_KEY`, `SECRET_KEY`) to `.env` or set `ENV_FILE=path/to/file`. `build.sh` reads that file, merges overrides, and writes a temporary Cloud Run–friendly env YAML before deployment. The script automatically forces `DATABASE_URL=sqlite+aiosqlite:///...` and clears `REDIS_URL` so the single container remains dependency-free.
 
 ## Local Build & Test
 
@@ -51,7 +52,7 @@ The container serves the FastAPI backend and (when `SERVE_FRONTEND_BUILD=true`) 
 
 ## Deploy to Cloud Run
 
-`build.sh` automates Cloud Build submission and Cloud Run deployment. It automatically loads key/value pairs from `.env` (or `ENV_FILE=path/to/file`) when `CLOUD_RUN_ENV_VARS` is not explicitly supplied. Those variables are written to a temporary JSON map and passed to `gcloud run deploy --env-vars-file`, so URLs and other values do not need manual escaping. The script also ensures the base image exists before building the lighter application layer:
+`build.sh` automates Cloud Build submission and Cloud Run deployment. It loads environment variables from `.env` (or `ENV_FILE=...`), rewrites `DATABASE_URL` to the Cloud Run–safe SQLite path, clears Redis, and then deploys a **single** container. No sidecars, stateful services, or manual `env-vars-file` juggling required:
 
 ```bash
 PROJECT_ID=my-project \
@@ -65,8 +66,9 @@ What the script does:
 2. Ensures `cloudbuild.googleapis.com` and `run.googleapis.com` are enabled.
 3. Builds/pushes the dependency base image (unless `BUILD_BASE_IMAGE=never` or it already exists).
 4. Builds the final Docker image with `gcloud builds submit --build-arg BASE_IMAGE=...` so only app layers change.
-5. Deploys to Cloud Run with the environment variables pulled from `.env`.
-6. Prints the public service URL plus health & status endpoints for quick validation.
+5. Generates a temporary env file with the merged/overridden variables.
+6. Deploys the container to Cloud Run (Gen2) with `sqlite+aiosqlite:///tmp/ragify.db` and `SERVE_FRONTEND_BUILD=true`.
+7. Prints the public service URL plus health & status endpoints for quick validation.
 
 ## Verification Checklist
 
