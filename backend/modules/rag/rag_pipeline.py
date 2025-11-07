@@ -633,7 +633,7 @@ class RAGPipeline:
         total_length = 0
 
         for i, result in enumerate(context):
-            context_item = f"[Context {i+1}] {result.content}"
+            context_item = f"{result.content}"
             if total_length + len(context_item) > query.max_context_length:
                 break
             context_parts.append(context_item)
@@ -644,7 +644,6 @@ class RAGPipeline:
         # Construct the prompt
         prompt = f"""You are a helpful AI assistant. Use the following context to answer the user's question accurately and helpfully.
 
-Context:
 {context_text}
 
 Question: {query.text}
@@ -653,7 +652,7 @@ Instructions:
 - Answer based on the provided context
 - If the context doesn't contain enough information, say so clearly
 - Be concise but comprehensive
-- Use evidence from the context to support your answer
+- Do not reference "Context" or numbered contexts in your response
 
 Answer:"""
 

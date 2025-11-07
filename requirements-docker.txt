@@ -1,9 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
 asyncpg
 pgvector
+aiosqlite
 sentence-transformers
 faiss-cpu
 streamlit
@@ -23,3 +26,4 @@ alembic
 pytesseract
 Pillow
 pdf2image
+torch==2.4.1+cpu

@@ -4,13 +4,13 @@ from sqlalchemy.orm import relationship
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from backend.modules.knowledge.models import Base
+from backend.modules.knowledge.models import Base, UUIDType
 
 
 class Application(Base):
     __tablename__ = "applications"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id = Column(UUIDType, primary_key=True, default=lambda: str(uuid4()))
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(
@@ -29,8 +29,8 @@ class Application(Base):
 class ApplicationVersion(Base):
     __tablename__ = "application_versions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id"))
+    id = Column(UUIDType, primary_key=True, default=lambda: str(uuid4()))
+    application_id = Column(UUIDType, ForeignKey("applications.id"))
     version = Column(String, nullable=False)
     config = Column(Text, nullable=True)
     created_at = Column(
@@ -43,8 +43,8 @@ class ApplicationVersion(Base):
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    application_id = Column(UUID(as_uuid=True), ForeignKey("applications.id"))
+    id = Column(UUIDType, primary_key=True, default=lambda: str(uuid4()))
+    application_id = Column(UUIDType, ForeignKey("applications.id"))
     user_message = Column(Text, nullable=False)
     bot_message = Column(Text, nullable=True)
     created_at = Column(

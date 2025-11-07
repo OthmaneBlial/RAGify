@@ -4,10 +4,11 @@ from typing import List, Dict, Any, Optional
 from uuid import UUID
 from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from .embedding import encode_text, embedding_model
 from ..knowledge.crud import search_embeddings_by_similarity
+from ...core.database import is_sqlite, normalize_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -150,33 +151,56 @@ class RetrievalService:
         if limit is None:
             limit = self.max_results
 
-        from sqlalchemy import text
+        params = {}
 
-        # Build query for keyword search
-        sql_query = """
-        SELECT
-            p.id as paragraph_id,
-            p.content as paragraph_content,
-            p.document_id,
-            d.title as document_title,
-            d.knowledge_base_id,
-            ts_rank_cd(to_tsvector('english', p.content), plainto_tsquery('english', :query)) as rank_score
-        FROM paragraphs p
-        JOIN documents d ON p.document_id = d.id
-        WHERE to_tsvector('english', p.content) @@ plainto_tsquery('english', :query)
-        """
-
-        params = {"query": query}
+        if is_sqlite:
+            sql_query = """
+            SELECT
+                p.id as paragraph_id,
+                p.content as paragraph_content,
+                p.document_id,
+                d.title as document_title,
+                d.knowledge_base_id,
+                CASE
+                    WHEN instr(lower(p.content), :query_lower) > 0 THEN
+                        1.0 / (instr(lower(p.content), :query_lower) + 1)
+                    ELSE 0
+                END as rank_score
+            FROM paragraphs p
+            JOIN documents d ON p.document_id = d.id
+            WHERE (:query_lower = '' OR lower(p.content) LIKE :like_query)
+            """
+            query_lower = (query or "").lower()
+            params.update(
+                {
+                    "query_lower": query_lower,
+                    "like_query": f"%{query_lower}%",
+                }
+            )
+        else:
+            sql_query = """
+            SELECT
+                p.id as paragraph_id,
+                p.content as paragraph_content,
+                p.document_id,
+                d.title as document_title,
+                d.knowledge_base_id,
+                ts_rank_cd(to_tsvector('english', p.content), plainto_tsquery('english', :query)) as rank_score
+            FROM paragraphs p
+            JOIN documents d ON p.document_id = d.id
+            WHERE to_tsvector('english', p.content) @@ plainto_tsquery('english', :query)
+            """
+            params["query"] = query
 
         if knowledge_base_ids:
             placeholders = [f":kb_id_{i}" for i in range(len(knowledge_base_ids))]
             sql_query += f" AND d.knowledge_base_id IN ({', '.join(placeholders)})"
             for i, kb_id in enumerate(knowledge_base_ids):
-                params[f"kb_id_{i}"] = kb_id
+                params[f"kb_id_{i}"] = normalize_uuid(kb_id)
 
         if application_id:
             sql_query += " AND d.application_id = :app_id"
-            params["app_id"] = application_id
+            params["app_id"] = normalize_uuid(application_id)
 
         sql_query += " ORDER BY rank_score DESC LIMIT :limit"
         params["limit"] = limit

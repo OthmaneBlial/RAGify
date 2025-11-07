@@ -14,43 +14,10 @@ This guide provides detailed instructions for setting up RAGify from scratch, in
 
 ### Required Software
 
-#### Python 3.8+
-
-```bash
-# Check Python version
-python --version
-
-# If not installed, download from python.org
-# Or use your system package manager
-```
-
-#### PostgreSQL 12+
-
-```bash
-# Ubuntu/Debian
-sudo apt update
-sudo apt install postgresql postgresql-contrib
-
-# macOS with Homebrew
-brew install postgresql
-brew services start postgresql
-
-# Windows: Download from postgresql.org
-```
-
-#### Redis 6+ (Optional but recommended)
-
-```bash
-# Ubuntu/Debian
-sudo apt install redis-server
-sudo systemctl start redis-server
-
-# macOS with Homebrew
-brew install redis
-brew services start redis
-
-# Windows: Download from redis.io
-```
+- **Python 3.8+** – main runtime
+- **SQLite** – ships with Python, used by default
+- **Optional**: PostgreSQL 12+ (if you need pgvector/permanent DB)
+- **Optional**: Redis 6+ (for distributed caching; the app auto-falls back to an in-memory cache if Redis is unavailable)
 
 ## Environment Configuration
 
@@ -96,7 +63,11 @@ Edit the `.env` file with your configuration:
 
 ```env
 # Database Configuration
-DATABASE_URL=postgresql://username:password@localhost:5432/ragify
+# Default: local SQLite file (no external service required)
+DATABASE_URL=sqlite+aiosqlite:///./ragify.db
+
+# To use PostgreSQL instead, replace the line above with:
+# DATABASE_URL=postgresql+asyncpg://username:password@localhost:5432/ragify
 
 # Security Settings
 SECRET_KEY=your-super-secret-key-change-this-in-production
@@ -128,42 +99,29 @@ RATE_LIMIT_WINDOW=60
 
 ## Database Setup
 
-### 1. Create Database and User
+SQLite works out of the box—no setup required. Just run `./startup.sh` and pick option 1.
 
-```sql
--- Connect to PostgreSQL as superuser
-sudo -u postgres psql
+If you prefer PostgreSQL + pgvector:
 
--- Create database
-CREATE DATABASE ragify;
+1. **Create database and user**
+    ```sql
+    sudo -u postgres psql
+    CREATE DATABASE ragify;
+    CREATE USER ragify_user WITH PASSWORD 'your_secure_password';
+    GRANT ALL PRIVILEGES ON DATABASE ragify TO ragify_user;
+    \q
+    ```
+2. **Verify connection**
+    ```bash
+    psql -h localhost -U ragify_user -d ragify
+    ```
+3. **Enable pgvector**
+    ```sql
+    psql -d ragify -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    ```
+4. Update `DATABASE_URL` in `.env`, then run `./startup.sh` and choose option 2 (PostgreSQL).
 
--- Create user
-CREATE USER ragify_user WITH PASSWORD 'your_secure_password';
-
--- Grant privileges
-GRANT ALL PRIVILEGES ON DATABASE ragify TO ragify_user;
-
--- Exit PostgreSQL
-\q
-```
-
-### 2. Verify Database Connection
-
-```bash
-# Test connection
-psql -h localhost -U ragify_user -d ragify
-```
-
-### 3. Database Initialization
-
-The application will automatically create tables on startup. If you need manual control:
-
-```bash
-# Run database migrations (if using Alembic)
-alembic upgrade head
-
-# Or let FastAPI create tables automatically
-```
+Tables are created automatically on startup; Alembic migrations remain available if you need manual control.
 
 ## OpenRouter API Configuration
 

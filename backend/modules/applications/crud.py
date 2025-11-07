@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from uuid import UUID
 
+from backend.core.database import normalize_uuid
 from .models import Application, ApplicationVersion, ChatMessage
 
 
@@ -64,9 +65,10 @@ async def get_application(
     Returns:
         Application with latest version or None
     """
+    db_application_id = normalize_uuid(application_id)
     result = await db.execute(
         select(Application)
-        .where(Application.id == application_id)
+        .where(Application.id == db_application_id)
         .options(selectinload(Application.versions))
     )
     application = result.scalar_one_or_none()
@@ -142,6 +144,7 @@ async def update_application(
     Returns:
         Updated application or None
     """
+    db_application_id = normalize_uuid(application_id)
     application = await get_application(db, application_id)
     if not application:
         return None
@@ -156,7 +159,7 @@ async def update_application(
     if update_data:
         await db.execute(
             update(Application)
-            .where(Application.id == application_id)
+            .where(Application.id == db_application_id)
             .values(**update_data)
         )
         await db.commit()
@@ -196,7 +199,7 @@ async def update_application(
                 next_version = f"v{len(application.versions) + 1}"
 
         version = ApplicationVersion(
-            application_id=application_id,
+            application_id=db_application_id,
             version=next_version,
             config=json.dumps(new_config),
         )
@@ -218,21 +221,23 @@ async def delete_application(db: AsyncSession, application_id: UUID) -> bool:
     Returns:
         True if deleted, False otherwise
     """
+    db_application_id = normalize_uuid(application_id)
+
     # Delete chat messages first
     await db.execute(
-        delete(ChatMessage).where(ChatMessage.application_id == application_id)
+        delete(ChatMessage).where(ChatMessage.application_id == db_application_id)
     )
 
     # Delete versions
     await db.execute(
         delete(ApplicationVersion).where(
-            ApplicationVersion.application_id == application_id
+            ApplicationVersion.application_id == db_application_id
         )
     )
 
     # Delete application
     result = await db.execute(
-        delete(Application).where(Application.id == application_id)
+        delete(Application).where(Application.id == db_application_id)
     )
 
     await db.commit()
@@ -361,8 +366,10 @@ async def create_chat_message(
     Returns:
         Created message data
     """
+    db_application_id = normalize_uuid(application_id)
+
     message = ChatMessage(
-        application_id=application_id,
+        application_id=db_application_id,
         user_message=user_message,
         bot_message=bot_message,
     )
@@ -393,9 +400,10 @@ async def get_application_chat_history(
     Returns:
         List of chat messages
     """
+    db_application_id = normalize_uuid(application_id)
     result = await db.execute(
         select(ChatMessage)
-        .where(ChatMessage.application_id == application_id)
+        .where(ChatMessage.application_id == db_application_id)
         .order_by(ChatMessage.created_at.desc())
         .limit(limit)
     )
@@ -415,8 +423,9 @@ async def get_application_chat_history(
 
 async def clear_chat_history(db: AsyncSession, application_id: UUID) -> int:
     """Delete all chat messages for an application and return removed count."""
+    db_application_id = normalize_uuid(application_id)
     result = await db.execute(
-        delete(ChatMessage).where(ChatMessage.application_id == application_id)
+        delete(ChatMessage).where(ChatMessage.application_id == db_application_id)
     )
     await db.commit()
     return result.rowcount or 0

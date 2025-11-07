@@ -76,6 +76,7 @@ class CacheManager:
 
     def __init__(self):
         self.redis_client = None
+        self._redis_disabled = False
         self.memory_cache = TTLCache(maxsize=1000, ttl=3600)  # 1 hour default TTL
         self._init_redis()
 
@@ -84,12 +85,25 @@ class CacheManager:
         if redis and hasattr(settings, "redis_url") and settings.redis_url:
             try:
                 self.redis_client = redis.from_url(settings.redis_url)
+                self._redis_disabled = False
                 logger.info("Redis cache initialized")
             except Exception as e:
                 logger.warning(f"Failed to initialize Redis: {e}")
                 self.redis_client = None
+                self._redis_disabled = True
         else:
             logger.info("Redis not available, using in-memory cache only")
+            self._redis_disabled = True
+
+    def _disable_redis(self, error: Exception = None):
+        """Disable Redis usage after repeated failures."""
+        if self.redis_client:
+            if error:
+                logger.warning(f"Disabling Redis cache after error: {error}")
+            else:
+                logger.warning("Disabling Redis cache")
+        self.redis_client = None
+        self._redis_disabled = True
 
     async def get(self, key: str, cache_type: CacheType = None) -> Optional[Any]:
         """
@@ -118,6 +132,7 @@ class CacheManager:
                         await self.redis_client.delete(redis_key)
             except Exception as e:
                 logger.error(f"Redis get error: {e}")
+                self._disable_redis(e)
 
         # Try memory cache
         memory_key = f"{cache_type.value}:{key}" if cache_type else key
@@ -165,6 +180,7 @@ class CacheManager:
             except Exception as e:
                 logger.error(f"Redis set error: {e}")
                 success = False
+                self._disable_redis(e)
 
         # Set in memory cache
         memory_key = f"{cache_type.value}:{key}" if cache_type else key
@@ -193,6 +209,7 @@ class CacheManager:
             except Exception as e:
                 logger.error(f"Redis delete error: {e}")
                 success = False
+                self._disable_redis(e)
 
         # Delete from memory cache
         memory_key = f"{cache_type.value}:{key}" if cache_type else key
