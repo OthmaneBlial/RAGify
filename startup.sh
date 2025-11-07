@@ -17,22 +17,22 @@ done
 # Database selection
 if [ -z "${DATABASE_URL:-}" ]; then
     echo "Choose database type:"
-    echo "1) SQLite (in-memory) - Fast, no setup needed (recommended for testing/Cloud Run)"
+    echo "1) SQLite (file-based) - Fast, no setup needed (recommended for testing/Cloud Run)"
     echo "2) PostgreSQL - Full-featured, persistent (recommended for production)"
     read -p "Enter choice (1 or 2): " db_choice
 
     case $db_choice in
         1)
-            export DATABASE_URL="sqlite+aiosqlite:///:memory:"
-            echo "Using SQLite (in-memory) database"
+            export DATABASE_URL="sqlite+aiosqlite:///./ragify.db"
+            echo "Using SQLite (file-based) database at ./ragify.db"
             ;;
         2)
             export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
             echo "Using PostgreSQL database"
             ;;
         *)
-            echo "Invalid choice. Using SQLite (in-memory) as default."
-            export DATABASE_URL="sqlite+aiosqlite:///:memory:"
+            echo "Invalid choice. Using SQLite (file-based) as default."
+            export DATABASE_URL="sqlite+aiosqlite:///./ragify.db"
             ;;
     esac
 else
@@ -40,6 +40,42 @@ else
 fi
 
 echo "Starting RAGify..."
+
+# For SQLite file-based, initialize database and create default application
+if [[ "$DATABASE_URL" == sqlite+aiosqlite* ]]; then
+    echo "Initializing SQLite database..."
+    PYTHONPATH=/home/othmane/projects/RAGify python3 -c "
+import asyncio
+import sys
+sys.path.insert(0, '/home/othmane/projects/RAGify')
+
+from backend.core.database import engine, get_db_session
+from backend.modules.knowledge.models import Base
+from backend.modules.applications.models import Application, ApplicationVersion, ChatMessage
+from backend.modules.applications.crud import create_application, list_applications
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        print('Tables created')
+    
+    async with get_db_session() as db:
+        apps = await list_applications(db)
+        if not apps:
+            await create_application(
+                db=db,
+                name='Default Chat Application',
+                description='Default application for chat functionality',
+                config={'provider': 'openrouter', 'model': 'openai/gpt-5-nano'},
+                knowledge_base_ids=[]
+            )
+            print('Default application created')
+        else:
+            print('Default application already exists')
+
+asyncio.run(init_db())
+"
+fi
 
 # Start backend
 echo "Starting backend (FastAPI) on port 8000..."

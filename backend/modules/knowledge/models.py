@@ -1,4 +1,4 @@
-from sqlalchemy import String, Text, DateTime, ForeignKey, Column
+from sqlalchemy import String, Text, DateTime, ForeignKey, Column, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
@@ -11,8 +11,10 @@ from ...core.config import settings
 if is_sqlite:
     # For SQLite, use String type for UUIDs since SQLite doesn't have native UUID
     UUIDType = String
+    VectorColumnType = JSON
 else:
     UUIDType = UUID(as_uuid=True)
+    VectorColumnType = Vector(settings.vector_dimension)
 
 Base = declarative_base()
 
@@ -81,7 +83,7 @@ class Embedding(Base):
     __tablename__ = "embeddings"
 
     id = Column(UUIDType, primary_key=True, default=lambda: str(uuid4()))
-    vector = Column(Vector(settings.vector_dimension) if Vector else Text)
+    vector = Column(VectorColumnType)
     paragraph_id = Column(UUIDType, ForeignKey("paragraphs.id"))
     created_at = Column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)

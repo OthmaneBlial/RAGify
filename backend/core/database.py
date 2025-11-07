@@ -1,8 +1,10 @@
+import json
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import AsyncAdaptedQueuePool
 from typing import AsyncGenerator, Any, Dict
 from contextlib import asynccontextmanager
+from uuid import UUID
 from .config import settings
 from sqlalchemy import text
 
@@ -23,6 +25,26 @@ if is_postgres:
 elif is_sqlite:
     # For SQLite, we'll use a simple list-based vector storage
     pass
+
+
+def normalize_uuid(value):
+    """
+    Coerce UUID/string identifiers into the database-friendly representation.
+
+    SQLite stores UUID columns as strings, while PostgreSQL expects UUID objects.
+    """
+    if value is None:
+        return None
+
+    if is_sqlite:
+        if isinstance(value, UUID):
+            return str(value)
+        return str(value)
+
+    if isinstance(value, UUID):
+        return value
+
+    return UUID(str(value))
 
 # Optimized async engine with connection pooling
 connect_args = {}
@@ -45,6 +67,9 @@ elif is_sqlite:
     from sqlalchemy.pool import StaticPool
     poolclass = StaticPool
 
+# Event listener to enable foreign keys for SQLite
+from sqlalchemy import event
+
 if is_sqlite:
     engine = create_async_engine(
         settings.database_url,
@@ -66,6 +91,15 @@ else:
         pool_recycle=3600,  # Recycle connections after 1 hour
         connect_args=connect_args,
     )
+
+# Register event listener after engine is created
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    """Enable foreign key constraints for SQLite."""
+    if is_sqlite:
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 AsyncSessionLocal = sessionmaker(
     engine,
@@ -124,7 +158,7 @@ async def bulk_insert_embeddings(session: AsyncSession, embeddings_data):
         # For SQLite, insert one by one since it doesn't have unnest or vector types
         inserted_count = 0
         for embedding in embeddings_data:
-            vector_str = "[" + ",".join(str(x) for x in embedding["vector"]) + "]"
+            vector_str = json.dumps(embedding["vector"])
             q = text(
                 """
                 INSERT OR IGNORE INTO embeddings (vector, paragraph_id)
