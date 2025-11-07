@@ -14,6 +14,31 @@ for port in 8000 5173; do
   fi
 done
 
+# Database selection
+if [ -z "${DATABASE_URL:-}" ]; then
+    echo "Choose database type:"
+    echo "1) SQLite (in-memory) - Fast, no setup needed (recommended for testing/Cloud Run)"
+    echo "2) PostgreSQL - Full-featured, persistent (recommended for production)"
+    read -p "Enter choice (1 or 2): " db_choice
+
+    case $db_choice in
+        1)
+            export DATABASE_URL="sqlite+aiosqlite:///:memory:"
+            echo "Using SQLite (in-memory) database"
+            ;;
+        2)
+            export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
+            echo "Using PostgreSQL database"
+            ;;
+        *)
+            echo "Invalid choice. Using SQLite (in-memory) as default."
+            export DATABASE_URL="sqlite+aiosqlite:///:memory:"
+            ;;
+    esac
+else
+    echo "Using DATABASE_URL from environment: $DATABASE_URL"
+fi
+
 echo "Starting RAGify..."
 
 # Start backend

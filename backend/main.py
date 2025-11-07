@@ -15,7 +15,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from .core.database import engine, warmup_connections
+from .core.database import engine, warmup_connections, is_postgres
 from .core.async_tasks import task_manager
 from .modules.knowledge.models import Base
 from .modules.applications.models import ChatMessage
@@ -69,6 +69,14 @@ async def lifespan(app: FastAPI):
     # Startup: Create tables and warmup connections
     logger.info("Starting RAGify application...")
     async with engine.begin() as conn:
+        # For PostgreSQL, create vector extension if needed
+        if is_postgres:
+            try:
+                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+                logger.info("PostgreSQL vector extension ensured")
+            except Exception as e:
+                logger.warning(f"Could not create vector extension: {e}")
+
         await conn.run_sync(Base.metadata.create_all)
         # Create ChatMessage table
         await conn.run_sync(ChatMessage.__table__.create, checkfirst=True)

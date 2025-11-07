@@ -4,9 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = (
-        "postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
-    )
+    database_url: str = "postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
 
     # Security
     secret_key: str = "your-secret-key-here"

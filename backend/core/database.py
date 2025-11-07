@@ -6,20 +6,28 @@ from contextlib import asynccontextmanager
 from .config import settings
 from sqlalchemy import text
 
-# Assuming pgvector is installed
-try:
-    from pgvector.sqlalchemy import Vector
-except ImportError:
-    Vector = None
-
-if Vector is None:
-    raise ImportError("pgvector is required. Install pgvector and enable extension.")
-
-# Optimized async engine with connection pooling
-# Check if we're using PostgreSQL or SQLite
+# Database type detection and vector support
+is_sqlite = "sqlite" in settings.database_url.lower()
 is_postgres = "postgresql" in settings.database_url.lower()
 
+# Vector support - only required for PostgreSQL
+Vector = None
+if is_postgres:
+    try:
+        from pgvector.sqlalchemy import Vector
+    except ImportError:
+        Vector = None
+
+    if Vector is None:
+        raise ImportError("pgvector is required for PostgreSQL. Install pgvector and enable extension.")
+elif is_sqlite:
+    # For SQLite, we'll use a simple list-based vector storage
+    pass
+
+# Optimized async engine with connection pooling
 connect_args = {}
+poolclass = AsyncAdaptedQueuePool
+
 if is_postgres:
     connect_args = {
         "server_settings": {
@@ -28,19 +36,36 @@ if is_postgres:
             "maintenance_work_mem": "256MB",  # Increase maintenance work memory
         }
     }
+elif is_sqlite:
+    # SQLite-specific configuration
+    connect_args = {
+        "check_same_thread": False,  # Allow multi-threaded access
+    }
+    # Use StaticPool for SQLite to avoid connection pool issues
+    from sqlalchemy.pool import StaticPool
+    poolclass = StaticPool
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=False,  # Disable for production performance
-    future=True,
-    poolclass=AsyncAdaptedQueuePool,
-    pool_pre_ping=True,  # Verify connections before use
-    pool_size=10,  # Base pool size
-    max_overflow=20,  # Maximum overflow connections
-    pool_timeout=30,  # Connection timeout
-    pool_recycle=3600,  # Recycle connections after 1 hour
-    connect_args=connect_args,
-)
+if is_sqlite:
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,  # Disable for production performance
+        future=True,
+        poolclass=poolclass,
+        connect_args=connect_args,
+    )
+else:
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,  # Disable for production performance
+        future=True,
+        poolclass=poolclass,
+        pool_pre_ping=True,  # Verify connections before use
+        pool_size=10,  # Base pool size
+        max_overflow=20,  # Maximum overflow connections
+        pool_timeout=30,  # Connection timeout
+        pool_recycle=3600,  # Recycle connections after 1 hour
+        connect_args=connect_args,
+    )
 
 AsyncSessionLocal = sessionmaker(
     engine,
@@ -77,23 +102,44 @@ async def bulk_insert_embeddings(session: AsyncSession, embeddings_data):
         return 0
     from sqlalchemy import text
 
-    # Convert vectors to PostgreSQL vector string format
-    vectors = [
-        "[" + ",".join(str(x) for x in e["vector"]) + "]" for e in embeddings_data
-    ]
-    para_ids = [e["paragraph_id"] for e in embeddings_data]
-    q = text(
+    if is_postgres:
+        # Convert vectors to PostgreSQL vector string format
+        vectors = [
+            "[" + ",".join(str(x) for x in e["vector"]) + "]" for e in embeddings_data
+        ]
+        para_ids = [e["paragraph_id"] for e in embeddings_data]
+        q = text(
+            """
+          WITH data AS (
+            SELECT unnest(:vectors)::vector, unnest(:pids)::uuid
+          )
+          INSERT INTO embeddings (vector, paragraph_id)
+          SELECT * FROM data
+          ON CONFLICT (paragraph_id) DO NOTHING
         """
-      WITH data AS (
-        SELECT unnest(:vectors)::vector, unnest(:pids)::uuid
-      )
-      INSERT INTO embeddings (vector, paragraph_id)
-      SELECT * FROM data
-      ON CONFLICT (paragraph_id) DO NOTHING
-    """
-    )
-    res = await session.execute(q, {"vectors": vectors, "pids": para_ids})
-    return res.rowcount or 0
+        )
+        res = await session.execute(q, {"vectors": vectors, "pids": para_ids})
+        return res.rowcount or 0
+    elif is_sqlite:
+        # For SQLite, insert one by one since it doesn't have unnest or vector types
+        inserted_count = 0
+        for embedding in embeddings_data:
+            vector_str = "[" + ",".join(str(x) for x in embedding["vector"]) + "]"
+            q = text(
+                """
+                INSERT OR IGNORE INTO embeddings (vector, paragraph_id)
+                VALUES (:vector, :paragraph_id)
+                """
+            )
+            res = await session.execute(q, {
+                "vector": vector_str,
+                "paragraph_id": embedding["paragraph_id"]
+            })
+            if res.rowcount and res.rowcount > 0:
+                inserted_count += res.rowcount
+        return inserted_count
+    else:
+        raise ValueError("Unsupported database type for bulk embedding insertion")
 
 
 async def execute_optimized_query(
@@ -113,8 +159,8 @@ async def execute_optimized_query(
     from sqlalchemy import text
 
     # Add optimization hints for embedding queries
-    if "embeddings" in query.lower() and "<->" in query:
-        # Add index hint for vector similarity search
+    if is_postgres and "embeddings" in query.lower() and "<->" in query:
+        # Add index hint for vector similarity search (PostgreSQL only)
         optimized_query = f"SET LOCAL enable_seqscan = off; {query}"
     else:
         optimized_query = query
@@ -148,7 +194,16 @@ async def get_connection_stats() -> Dict[str, Any]:
 async def warmup_connections():
     """Warm up database connections for better initial performance."""
     connections = []
-    for _ in range(min(5, engine.pool.size())):
+
+    # Handle different pool types
+    if hasattr(engine.pool, 'size'):
+        # AsyncAdaptedQueuePool (PostgreSQL)
+        pool_size = engine.pool.size()
+    else:
+        # StaticPool (SQLite) - use a fixed small number
+        pool_size = 1
+
+    for _ in range(min(5, pool_size)):
         conn = await engine.connect()
         connections.append(conn)
 

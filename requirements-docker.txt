@@ -6,6 +6,7 @@ sqlalchemy
 psycopg2-binary
 asyncpg
 pgvector
+aiosqlite
 sentence-transformers
 faiss-cpu
 streamlit
