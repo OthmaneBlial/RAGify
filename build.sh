@@ -7,12 +7,12 @@ set -euo pipefail
 
 # --- Configuration Station 🚂 ---
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TEMP_BUILD_CONFIG=""
+TEMP_ENV_FILE=""
 
 # --- Cleanup Crew 🧹 ---
 cleanup() {
   echo "🧹 Cleaning up temporary files..."
-  rm -f "${TEMP_BUILD_CONFIG}"
+  [[ -n "${TEMP_ENV_FILE}" ]] && rm -f "${TEMP_ENV_FILE}"
 }
 
 trap 'cleanup; echo -e "\n\033[0;31m❌ Oh no! Something went wrong. Check the logs above.\033[0m"; exit 1' ERR
@@ -45,6 +45,7 @@ base_image_exists() {
 # 1️⃣  System Check & Variable Setup
 echo "📋 Final pre-flight check..."
 require_command gcloud
+require_command python3
 
 PROJECT_ID="${PROJECT_ID:-$(gcloud config get-value project 2>/dev/null || true)}"
 if [[ -z "${PROJECT_ID// }" ]]; then
@@ -56,10 +57,64 @@ IMAGE_NAME="${IMAGE_NAME:-ragify}"
 SERVICE_NAME="${SERVICE_NAME:-ragify}"
 REGION="${REGION:-us-central1}"
 CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8000}"
+CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-2Gi}"
+CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-1}"
 IMAGE_URI="gcr.io/${PROJECT_ID}/${IMAGE_NAME}"
 BASE_IMAGE_NAME="${BASE_IMAGE_NAME:-ragify-backend-base}"
 BASE_IMAGE_URI="${BASE_IMAGE_URI:-gcr.io/${PROJECT_ID}/${BASE_IMAGE_NAME}:latest}"
 BUILD_BASE_IMAGE="${BUILD_BASE_IMAGE:-auto}"
+ENV_FILE_PATH="${ENV_FILE:-${ROOT_DIR}/.env}"
+SQLITE_DB_PATH="${SQLITE_DB_PATH:-/tmp/ragify.db}"
+if [[ "${SQLITE_DB_PATH}" == /* ]]; then
+  DATABASE_URL_OVERRIDE="sqlite+aiosqlite:////${SQLITE_DB_PATH#/}"
+else
+  DATABASE_URL_OVERRIDE="sqlite+aiosqlite:///${SQLITE_DB_PATH}"
+fi
+
+if [[ -n "${ENV_FILE_PATH}" && ! "${ENV_FILE_PATH}" = /* ]]; then
+  ENV_FILE_PATH="${ROOT_DIR}/${ENV_FILE_PATH}"
+fi
+
+if [[ ! -f "${ENV_FILE_PATH}" ]]; then
+  echo "ℹ️  ENV file '${ENV_FILE_PATH}' not found. Continuing with deployment overrides only."
+fi
+
+generate_env_file() {
+  TEMP_ENV_FILE="$(mktemp)"
+  python3 - "$ENV_FILE_PATH" "$TEMP_ENV_FILE" "$DATABASE_URL_OVERRIDE" "$SQLITE_DB_PATH" <<'PY'
+import json
+import os
+import sys
+
+env_path, out_path, db_url, sqlite_path = sys.argv[1:5]
+env_data = {}
+
+if env_path and os.path.isfile(env_path):
+    with open(env_path, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            if value and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            env_data[key] = value
+
+env_data["DATABASE_URL"] = db_url
+env_data["SERVE_FRONTEND_BUILD"] = env_data.get("SERVE_FRONTEND_BUILD", "true") or "true"
+env_data["SQLITE_DB_PATH"] = sqlite_path
+env_data["REDIS_URL"] = ""
+
+with open(out_path, "w", encoding="utf-8") as handle:
+    for key in sorted(env_data):
+        handle.write(f"{key}: {json.dumps(env_data[key])}\n")
+PY
+  echo "🧾 Environment variables written to ${TEMP_ENV_FILE}"
+}
 
 # 2️⃣  gcloud Authentication
 echo "🔐 Verifying gcloud login..."
@@ -104,12 +159,10 @@ EOF
 ) --substitutions="_IMAGE_URI=${IMAGE_URI},_BASE_IMAGE_URI=${BASE_IMAGE_URI}"
 echo "✅ App image built and pushed!"
 
-# 6️⃣  Deploy Both Containers to Cloud Run! 🚀🚀
-echo "🚀 Deploying '${SERVICE_NAME}' with a shiny new database sidecar! This is it!"
+generate_env_file
 
-# We will read variables directly from the .env file, so ensure it is correct!
-# It should be pointing to localhost:
-# DATABASE_URL=postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify
+# 6️⃣  Deploy Both Containers to Cloud Run! 🚀🚀
+echo "🚀 Deploying '${SERVICE_NAME}' using the embedded SQLite database (no Redis required)!"
 
 gcloud run deploy "${SERVICE_NAME}" \
   --region "${REGION}" \
@@ -117,12 +170,9 @@ gcloud run deploy "${SERVICE_NAME}" \
   --execution-environment "gen2" \
   --image "${IMAGE_URI}" \
   --port "${CLOUD_RUN_PORT}" \
-  --container-env-vars-file "${ENV_FILE}" \
-  --add-container "ragify-db" \
-    --image "pgvector/pgvector:pg16" \
-    --container-env-vars "POSTGRES_DB=ragify,POSTGRES_USER=ragify,POSTGRES_PASSWORD=RagifyStrongPass2023" \
-    --container-ports "5432" \
-  --depends-on "ragify-db" \
+  --memory "${CLOUD_RUN_MEMORY}" \
+  --cpu "${CLOUD_RUN_CPU}" \
+  --env-vars-file "${TEMP_ENV_FILE}" \
   --quiet
 
 # 7️⃣  The Grand Reveal! 🥳
