@@ -2,8 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Optional, Dict, Any
 from uuid import UUID
+import math
+import json
 
-from backend.core.database import normalize_uuid
+from backend.core.database import normalize_uuid, is_sqlite
 from .models import KnowledgeBase, Document, Paragraph, Embedding
 from .processing import processing_service
 
@@ -201,7 +203,82 @@ async def search_embeddings_by_similarity(
     """
     from sqlalchemy import text
 
-    # Build the query with pgvector cosine similarity
+    db_kb_id = normalize_uuid(knowledge_base_id) if knowledge_base_id else None
+    db_app_id = normalize_uuid(application_id) if application_id else None
+
+    if is_sqlite:
+        # SQLite fallback: fetch candidate vectors and compute cosine in Python
+        query = """
+        SELECT
+            e.id as embedding_id,
+            e.vector as embedding_vector,
+            e.paragraph_id,
+            p.content as paragraph_content,
+            p.document_id,
+            d.title as document_title,
+            d.knowledge_base_id
+        FROM embeddings e
+        JOIN paragraphs p ON e.paragraph_id = p.id
+        JOIN documents d ON p.document_id = d.id
+        """
+
+        params = {}
+        where_conditions = []
+        if db_kb_id:
+            where_conditions.append("d.knowledge_base_id = :kb_id")
+            params["kb_id"] = db_kb_id
+        if db_app_id:
+            where_conditions.append("d.application_id = :app_id")
+            params["app_id"] = db_app_id
+
+        if where_conditions:
+            query += " WHERE " + " AND ".join(where_conditions)
+
+        result = await db.execute(text(query), params)
+        rows = result.fetchall()
+
+        def _coerce_vector(raw_value):
+            if raw_value is None:
+                return []
+            if isinstance(raw_value, (bytes, bytearray, memoryview)):
+                raw_value = raw_value.decode("utf-8")
+            if isinstance(raw_value, str):
+                try:
+                    raw_value = json.loads(raw_value)
+                except json.JSONDecodeError:
+                    raw_value = []
+            return [float(x) for x in raw_value]
+
+        def cosine_similarity(vec_a, vec_b):
+            dot = sum(a * b for a, b in zip(vec_a, vec_b))
+            norm_a = math.sqrt(sum(a * a for a in vec_a))
+            norm_b = math.sqrt(sum(b * b for b in vec_b))
+            if not norm_a or not norm_b:
+                return 0.0
+            return dot / (norm_a * norm_b)
+
+        scored_rows = []
+        for row in rows:
+            stored_vector = _coerce_vector(row.embedding_vector)
+            score = cosine_similarity(stored_vector, query_vector)
+            if threshold is None or score >= threshold:
+                scored_rows.append(
+                    {
+                        "embedding_id": row.embedding_id,
+                        "paragraph_id": row.paragraph_id,
+                        "document_id": row.document_id,
+                        "knowledge_base_id": row.knowledge_base_id,
+                        "paragraph_content": row.paragraph_content,
+                        "document_title": row.document_title,
+                        "similarity_score": float(score),
+                        "embedding_vector": stored_vector,
+                    }
+                )
+
+        scored_rows.sort(key=lambda r: r["similarity_score"], reverse=True)
+        return scored_rows[:limit]
+
+    # PostgreSQL path with pgvector
     query = """
     SELECT
         e.id as embedding_id,
@@ -217,14 +294,10 @@ async def search_embeddings_by_similarity(
     JOIN documents d ON p.document_id = d.id
     """
 
-    # Convert vector to PostgreSQL vector string format
     vector_str = "[" + ",".join(str(x) for x in query_vector) + "]"
     params = {"query_vector": vector_str}
-    db_kb_id = normalize_uuid(knowledge_base_id) if knowledge_base_id else None
-    db_app_id = normalize_uuid(application_id) if application_id else None
 
-    # Add filters if specified
-    where_conditions = []
+    where_conditions = ["(p.content IS NOT NULL AND TRIM(p.content) != '')"]
     if db_kb_id:
         where_conditions.append("d.knowledge_base_id = :kb_id")
         params["kb_id"] = db_kb_id
@@ -235,40 +308,29 @@ async def search_embeddings_by_similarity(
     if where_conditions:
         query += " WHERE " + " AND ".join(where_conditions)
 
-    # Add similarity threshold if specified
     if threshold is not None:
         where_clause = " WHERE " if not where_conditions else " AND "
         query += f"{where_clause} (1 - (e.vector <=> :query_vector)) >= :threshold"
         params["threshold"] = threshold
 
-    # Order by similarity (highest first) and limit results
     query += " ORDER BY e.vector <=> :query_vector LIMIT :limit"
     params["limit"] = limit
 
-    try:
-        result = await db.execute(text(query), params)
-
-        rows = result.fetchall()
-        return [
-            {
-                "embedding_id": row.embedding_id,
-                "paragraph_id": row.paragraph_id,
-                "document_id": row.document_id,
-                "knowledge_base_id": row.knowledge_base_id,
-                "paragraph_content": row.paragraph_content,
-                "document_title": row.document_title,
-                "similarity_score": float(row.similarity_score),
-                "embedding_vector": row.embedding_vector,
-            }
-            for row in rows
-        ]
-    except Exception as e:
-        # Handle SQLite compatibility - pgvector operations not available
-        # Return empty results for test environment
-        if "no such function" in str(e).lower() or "syntax error" in str(e).lower():
-            return []
-        # Re-raise other exceptions
-        raise
+    result = await db.execute(text(query), params)
+    rows = result.fetchall()
+    return [
+        {
+            "embedding_id": row.embedding_id,
+            "paragraph_id": row.paragraph_id,
+            "document_id": row.document_id,
+            "knowledge_base_id": row.knowledge_base_id,
+            "paragraph_content": row.paragraph_content,
+            "document_title": row.document_title,
+            "similarity_score": float(row.similarity_score),
+            "embedding_vector": row.embedding_vector,
+        }
+        for row in rows
+    ]
 
 
 async def search_paragraphs_by_text(
