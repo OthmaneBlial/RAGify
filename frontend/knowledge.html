@@ -127,8 +127,18 @@
     </div>
 
     <script>
+        const CLOUD_RUN_HOST_PATTERN = /run\.app|cloud\.run|appspot\.com|googleusercontent\.com/;
+
+        function isCloudRunEnvironment(hostname = window.location.hostname) {
+            return CLOUD_RUN_HOST_PATTERN.test(hostname);
+        }
+
         function resolveApiBase() {
             const { protocol, hostname, port } = window.location;
+            if (isCloudRunEnvironment(hostname)) {
+                return `${protocol}//${hostname}`;
+            }
+
             const portMapping = new Map([
                 ['5173', '8000'],
                 ['15173', '18000'],
@@ -139,7 +149,9 @@
             return `${protocol}//${hostname}:${targetPort}`;
         }
 
+        const IS_CLOUD_RUN = isCloudRunEnvironment();
         const API_BASE = resolveApiBase();
+        let openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
 
         async function handleFileSelect(event) {
             const files = event.target.files;
@@ -161,6 +173,11 @@
 
             try {
                 // Upload to the specific application's documents
+                // Add API key to form data for Cloud Run deployments
+                if (IS_CLOUD_RUN && openRouterApiKey) {
+                    formData.append('api_key', openRouterApiKey);
+                }
+
                 const response = await fetch(`${API_BASE}/api/v1/applications/${targetAppId}/documents/`, {
                     method: 'POST',
                     body: formData
@@ -606,8 +623,132 @@
             uploadBtn.disabled = !targetAppId;
         }
 
+        const CLOUD_RUN_KEY_MODAL_ID = 'cloudRunKeyModal';
+        const CLOUD_RUN_KEY_INPUT_ID = 'cloudRunKeyInput';
+        const CLOUD_RUN_KEY_ERROR_ID = 'cloudRunKeyError';
+        let cloudRunKeyResolver = null;
+
+        function configureCloudRunApiKey(key) {
+            openRouterApiKey = key;
+            localStorage.setItem('openrouter_api_key', key);
+            resolveCloudRunKeyPromise();
+            hideCloudRunModal();
+        }
+
+        function resolveCloudRunKeyPromise() {
+            if (typeof cloudRunKeyResolver === 'function') {
+                cloudRunKeyResolver();
+                cloudRunKeyResolver = null;
+            }
+        }
+
+        function waitForCloudRunApiKey() {
+            if (!IS_CLOUD_RUN) {
+                return Promise.resolve();
+            }
+
+            openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
+            if (openRouterApiKey) {
+                return Promise.resolve();
+            }
+
+            showCloudRunModal();
+            return new Promise((resolve) => {
+                cloudRunKeyResolver = resolve;
+            });
+        }
+
+        function showCloudRunModal() {
+            const modal = createCloudRunModal();
+            if (!modal) return;
+            const panel = modal.querySelector('.cloud-run-modal-panel');
+            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
+            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
+            if (input) {
+                input.value = openRouterApiKey || '';
+                input.focus();
+            }
+            if (error) {
+                error.classList.add('hidden');
+            }
+            document.body.classList.add('overflow-hidden');
+            modal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                panel?.classList.remove('scale-95', 'opacity-0');
+            });
+        }
+
+        function hideCloudRunModal() {
+            const modal = document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
+            if (!modal) {
+                return;
+            }
+            const panel = modal.querySelector('.cloud-run-modal-panel');
+            if (panel) {
+                panel.classList.add('scale-95', 'opacity-0');
+            }
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }, 200);
+        }
+
+        function handleCloudRunKeySave() {
+            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
+            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
+            if (!input || !error) {
+                return;
+            }
+            const key = input.value.trim();
+            if (!key) {
+                error.textContent = 'Please enter your OpenRouter API key';
+                error.classList.remove('hidden');
+                return;
+            }
+            error.classList.add('hidden');
+            configureCloudRunApiKey(key);
+        }
+
+        function createCloudRunModal() {
+            if (document.getElementById(CLOUD_RUN_KEY_MODAL_ID)) {
+                return document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
+            }
+
+            const modal = document.createElement('div');
+            modal.id = CLOUD_RUN_KEY_MODAL_ID;
+            modal.className = 'fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 py-6';
+            modal.innerHTML = `
+                <div class="cloud-run-modal-panel max-w-lg w-full bg-white rounded-3xl p-6 shadow-2xl transform scale-95 opacity-0 transition-all duration-200 space-y-4">
+                    <h3 class="text-xl font-semibold text-gray-900">OpenRouter API Key Required</h3>
+                    <p class="text-sm text-gray-600">This Cloud Run deployment needs your OpenRouter API key so the AI backend can respond to your requests. The key is stored only in your browser.</p>
+                    <input id="${CLOUD_RUN_KEY_INPUT_ID}" type="password" autocomplete="off" placeholder="sk-openrouter-..." class="w-full border border-blue-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                    <p id="${CLOUD_RUN_KEY_ERROR_ID}" class="text-xs text-rose-500 hidden">Please enter your OpenRouter API key</p>
+                    <div class="flex flex-col gap-3">
+                        <button id="cloudRunKeySaveBtn" class="w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 transition">Save API Key</button>
+                        <button id="cloudRunKeySettingsBtn" class="w-full text-sm text-blue-600 hover:underline">Go to Settings to manage API keys</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector('#cloudRunKeySaveBtn')?.addEventListener('click', handleCloudRunKeySave);
+            modal.querySelector('#cloudRunKeySettingsBtn')?.addEventListener('click', () => {
+                window.location.href = '/settings.html';
+            });
+            const input = modal.querySelector(`#${CLOUD_RUN_KEY_INPUT_ID}`);
+            if (input) {
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleCloudRunKeySave();
+                    }
+                });
+            }
+            return modal;
+        }
+
         // Load data on page load
-        window.onload = function() {
+        window.onload = async function() {
+            await waitForCloudRunApiKey();
             loadApplications();
             loadDocuments();
 

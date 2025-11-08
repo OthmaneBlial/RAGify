@@ -31,6 +31,7 @@ class RAGQuery:
     temperature: float = 0.7
     model_name: Optional[str] = None
     provider: Optional[str] = None
+    api_key: Optional[str] = None  # For Cloud Run deployments
 
 
 @dataclass
@@ -699,6 +700,7 @@ Answer:"""
                 max_tokens=min(
                     4096, query.max_context_length // 2
                 ),  # Reserve space for context
+                api_key=query.api_key,  # Pass API key for Cloud Run
             )
 
             # Create generation request
@@ -871,6 +873,7 @@ class StreamingRAGPipeline(RAGPipeline):
                 model_name=model_name,
                 temperature=query.temperature,
                 max_tokens=min(4096, query.max_context_length // 2),
+                api_key=query.api_key,  # Pass API key for Cloud Run
             )
 
             # Create generation request

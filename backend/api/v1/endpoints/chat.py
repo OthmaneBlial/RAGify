@@ -40,6 +40,9 @@ class ChatMessageRequest(BaseModel):
     provider: Optional[str] = Field(
         None, description="Provider name (optional, will use default if not provided)"
     )
+    api_key: Optional[str] = Field(
+        None, description="OpenRouter API key (for Cloud Run deployments)"
+    )
 
 
 class ChatMessageResponse(BaseModel):
@@ -130,6 +133,7 @@ async def send_chat_message(
             temperature=request.temperature,
             model_name=request.model_name,
             provider=request.provider,
+            api_key=request.api_key,  # Pass API key for Cloud Run
         )
 
         # Process query through RAG pipeline
@@ -195,6 +199,7 @@ async def send_chat_message_streaming(
             temperature=request.temperature,
             model_name=request.model_name,
             provider=request.provider,
+            api_key=request.api_key,  # Pass API key for Cloud Run
         )
 
         # Store the user message first

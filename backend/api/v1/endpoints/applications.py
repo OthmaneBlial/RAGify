@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from uuid import UUID
@@ -359,7 +359,7 @@ async def associate_knowledge_bases(
 # Application-specific document endpoints
 @router.post("/{app_id}/documents/", response_model=Document)
 async def upload_document_to_application(
-    app_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    app_id: UUID, file: UploadFile = File(...), api_key: Optional[str] = Form(None), db: AsyncSession = Depends(get_db)
 ):
     """
     Upload a document to a specific application.
