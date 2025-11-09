@@ -5,6 +5,42 @@ if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
   source "$SCRIPT_DIR/venv/bin/activate"
 fi
 
+REDIS_DOCKER_CONTAINER="${REDIS_DOCKER_CONTAINER:-ragify-redis-1}"
+REDIS_DOCKER_PORT="${REDIS_DOCKER_PORT:-16379}"
+
+ensure_docker_redis_container() {
+    if ! command -v docker >/dev/null 2>&1; then
+        return 1
+    fi
+
+    local container_status
+    container_status=$(docker inspect -f '{{.State.Status}}' "$REDIS_DOCKER_CONTAINER" 2>/dev/null || true)
+
+    if [ "$container_status" = "running" ]; then
+        echo "Redis container $REDIS_DOCKER_CONTAINER already running."
+        return 0
+    fi
+
+    if [ -n "$container_status" ]; then
+        echo "Starting existing Redis container $REDIS_DOCKER_CONTAINER..."
+        if docker start "$REDIS_DOCKER_CONTAINER" >/dev/null; then
+            echo "Redis container $REDIS_DOCKER_CONTAINER started."
+            return 0
+        fi
+        echo "Failed to start Redis container $REDIS_DOCKER_CONTAINER."
+        return 1
+    fi
+
+    echo "Creating Redis container $REDIS_DOCKER_CONTAINER on port $REDIS_DOCKER_PORT..."
+    if docker run -d --name "$REDIS_DOCKER_CONTAINER" -p "${REDIS_DOCKER_PORT}:6379" redis:7-alpine >/dev/null; then
+        echo "Redis container $REDIS_DOCKER_CONTAINER launched."
+        return 0
+    fi
+
+    echo "Failed to create Redis container $REDIS_DOCKER_CONTAINER."
+    return 1
+}
+
 # Kill processes already using ports 8000 and 5173
 for port in 8000 5173; do
   pid=$(lsof -t -i :$port || true)
@@ -76,7 +112,16 @@ else
         redis_candidates+=("$REDIS_URL")
         redis_candidate_source="env"
     else
-        redis_candidates+=("redis://localhost:6379/0" "redis://localhost:16379/0")
+        redis_candidates+=("redis://localhost:${REDIS_DOCKER_PORT}/0")
+        if [ "$REDIS_DOCKER_PORT" -ne 6379 ]; then
+            redis_candidates+=("redis://localhost:6379/0")
+        fi
+        if [ "$REDIS_DOCKER_PORT" -ne 16379 ]; then
+            redis_candidates+=("redis://localhost:16379/0")
+        fi
+        if ! ensure_docker_redis_container; then
+            echo "Could not automatically start Docker Redis container $REDIS_DOCKER_CONTAINER."
+        fi
     fi
 
     redis_chosen=""
