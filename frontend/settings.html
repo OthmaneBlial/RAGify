@@ -6,6 +6,32 @@
     <title>Settings - RAGify</title>
     <link rel="icon" type="image/svg+xml" href="/vite.svg">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        @media (max-width: 1024px) {
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+
+            #modelSelect {
+                min-height: auto;
+            }
+        }
+
+        @media (max-width: 640px) {
+            nav .flex {
+                flex-wrap: wrap;
+                gap: 0.25rem;
+            }
+
+            #cloudRunApiKeySection .space-y-2 {
+                gap: 0.75rem;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
     <!-- Navigation -->
@@ -15,7 +41,7 @@
                 <div class="flex items-center">
                     <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
                     <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
                     <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
@@ -40,7 +66,7 @@
                     <p class="text-sm text-gray-600">Choose which AI model powers your conversations. Use search to quickly find the perfect option.</p>
                 </div>
 
-                <div class="grid lg:grid-cols-[1fr_1.1fr] gap-6">
+                        <div class="grid lg:grid-cols-[1fr_1.1fr] gap-6 settings-grid">
                     <div class="space-y-4">
                         <div>
                             <label for="modelSearch" class="block text-sm font-medium text-gray-700 mb-2">Search Models</label>

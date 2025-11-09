@@ -25,6 +25,10 @@ if [ -z "${DATABASE_URL:-}" ]; then
         1)
             export DATABASE_URL="sqlite+aiosqlite:///./ragify.db"
             echo "Using SQLite (file-based) database at ./ragify.db"
+            if [ -f "$SCRIPT_DIR/ragify.db" ]; then
+                echo "Removing stale SQLite database file..."
+                rm -f "$SCRIPT_DIR/ragify.db"
+            fi
             ;;
         2)
             export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
@@ -39,26 +43,54 @@ else
     echo "Using DATABASE_URL from environment: $DATABASE_URL"
 fi
 
+is_sqlite=0
+if [[ "$DATABASE_URL" == sqlite+aiosqlite* ]]; then
+    is_sqlite=1
+fi
+
+if (( is_sqlite )); then
+    export REDIS_URL=""
+    echo "SQLite selected; Redis caching disabled (REDIS_URL cleared)."
+else
+    if [ -z "${REDIS_URL:-}" ]; then
+        if python3 - <<'PY' >/dev/null 2>&1
+import socket, sys
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.5)
+try:
+    sock.connect(("127.0.0.1", 6379))
+    sock.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+        then
+            export REDIS_URL="redis://localhost:6379"
+        else
+            export REDIS_URL=""
+            echo "Redis not reachable; disabling cache (REDIS_URL set to empty)"
+        fi
+    else
+        echo "Using REDIS_URL from environment: $REDIS_URL"
+    fi
+fi
+
 echo "Starting RAGify..."
 
-# For SQLite file-based, initialize database and create default application
-if [[ "$DATABASE_URL" == sqlite+aiosqlite* ]]; then
-    echo "Initializing SQLite database..."
-    PYTHONPATH=/home/othmane/projects/RAGify python3 -c "
-import asyncio
-import sys
+echo "Ensuring database schema and default application exist..."
+PYTHONPATH=/home/othmane/projects/RAGify python3 -c "
+import asyncio, sys
 sys.path.insert(0, '/home/othmane/projects/RAGify')
 
 from backend.core.database import engine, get_db_session
 from backend.modules.knowledge.models import Base
-from backend.modules.applications.models import Application, ApplicationVersion, ChatMessage
 from backend.modules.applications.crud import create_application, list_applications
 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        print('Tables created')
-    
+        print('Tables created for current database')
+
     async with get_db_session() as db:
         apps = await list_applications(db)
         if not apps:
@@ -75,6 +107,27 @@ async def init_db():
 
 asyncio.run(init_db())
 "
+
+if [[ "$DATABASE_URL" == postgresql+asyncpg* ]]; then
+    echo "Ensuring PostgreSQL vector schema/extension..."
+    python3 - <<'PY'
+import asyncio, os
+import asyncpg
+
+dsn = os.environ["DATABASE_URL"].replace("postgresql+asyncpg", "postgresql")
+
+async def prepare_vector():
+    conn = await asyncpg.connect(dsn=dsn)
+    try:
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS text")
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA text")
+        print("Vector extension ensured in schema 'text'")
+    finally:
+        await conn.close()
+
+asyncio.run(prepare_vector())
+PY
+
 fi
 
 # Start backend

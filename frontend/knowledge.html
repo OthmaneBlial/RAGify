@@ -7,6 +7,28 @@
     <!-- Updated navigation -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg">
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media (max-width: 1024px) {
+            #uploadBtn {
+                width: 100%;
+            }
+
+            #applicationsGrid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            nav .flex {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            #documentsContainer > div {
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50">
     <!-- Navigation -->
@@ -16,7 +38,7 @@
                 <div class="flex items-center">
                     <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
                     <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
                     <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
@@ -36,8 +58,8 @@
 
             <!-- Upload Section -->
             <div class="space-y-6">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
+                <div class="flex flex-wrap md:flex-row md:items-center md:justify-between gap-4">
+                    <div class="flex-1 min-w-[240px]">
                         <h2 class="text-xl font-semibold text-gray-900">Upload Documents</h2>
                         <p class="text-sm text-gray-600">Choose which AI assistant should have access to these documents</p>
                     </div>

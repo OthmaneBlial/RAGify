@@ -133,6 +133,27 @@
             background-color: #e5e7eb;
             color: #111827;
         }
+
+        @media (max-width: 900px) {
+            #messages {
+                padding: 1.5rem;
+            }
+
+            #messageInput {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            nav .flex {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .h-[650px] {
+                min-height: calc(100vh - 4rem);
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -143,7 +164,7 @@
                 <div class="flex items-center">
                     <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
                 </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
                     <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
                     <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
