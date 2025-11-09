@@ -31,8 +31,26 @@ if [ -z "${DATABASE_URL:-}" ]; then
             fi
             ;;
         2)
-            export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
-            echo "Using PostgreSQL database"
+            POSTGRES_HOST="localhost"
+            POSTGRES_PORT="5432"
+            if python3 - <<'PY' >/dev/null 2>&1
+import socket
+import sys
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.2)
+try:
+    sock.connect(("127.0.0.1", 15432))
+    sock.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+            then
+                POSTGRES_PORT="15432"
+                echo "Detected Dockerized PostgreSQL on port 15432"
+            fi
+            export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@${POSTGRES_HOST}:${POSTGRES_PORT}/ragify"
+            echo "Using PostgreSQL database at ${POSTGRES_HOST}:${POSTGRES_PORT}"
             ;;
         *)
             echo "Invalid choice. Using SQLite (file-based) as default."
@@ -52,26 +70,58 @@ if (( is_sqlite )); then
     export REDIS_URL=""
     echo "SQLite selected; Redis caching disabled (REDIS_URL cleared)."
 else
-    if [ -z "${REDIS_URL:-}" ]; then
-        if python3 - <<'PY' >/dev/null 2>&1
-import socket, sys
+    redis_candidates=()
+    redis_candidate_source="auto"
+    if [ -n "${REDIS_URL:-}" ]; then
+        redis_candidates+=("$REDIS_URL")
+        redis_candidate_source="env"
+    else
+        redis_candidates+=("redis://localhost:6379/0" "redis://localhost:16379/0")
+    fi
+
+    redis_chosen=""
+    for candidate in "${redis_candidates[@]}"; do
+        if [ -z "$candidate" ]; then
+            continue
+        fi
+        if REDIS_CANDIDATE="$candidate" python3 - <<'PY' >/dev/null 2>&1
+import os
+import socket
+from urllib.parse import urlparse
+candidate = os.environ.get("REDIS_CANDIDATE")
+if not candidate:
+    raise SystemExit(1)
+parsed = urlparse(candidate)
+if not parsed.hostname:
+    raise SystemExit(1)
+host = parsed.hostname
+port = parsed.port or 6379
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.settimeout(0.5)
 try:
-    sock.connect(("127.0.0.1", 6379))
+    sock.connect((host, port))
     sock.close()
-    sys.exit(0)
+    raise SystemExit(0)
 except Exception:
-    sys.exit(1)
+    raise SystemExit(1)
 PY
         then
-            export REDIS_URL="redis://localhost:6379"
-        else
-            export REDIS_URL=""
-            echo "Redis not reachable; disabling cache (REDIS_URL set to empty)"
+            redis_chosen="$candidate"
+            break
         fi
+    done
+
+    if [ -n "$redis_chosen" ]; then
+        export REDIS_URL="$redis_chosen"
+        echo "Using Redis at $REDIS_URL"
     else
-        echo "Using REDIS_URL from environment: $REDIS_URL"
+        if [ "$redis_candidate_source" = "env" ]; then
+            echo "Could not connect to Redis at ${redis_candidates[0]}"
+        else
+            echo "Redis is required for PostgreSQL but no local instance was reachable (checked ports 6379 and 16379)."
+        fi
+        echo "Start Redis (e.g., 'docker start ragify-redis-local' or 'docker compose up -d redis') or set REDIS_URL."
+        exit 1
     fi
 fi
 
