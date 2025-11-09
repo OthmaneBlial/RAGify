@@ -54,6 +54,10 @@ dev = [
     "flake8",
     "autoflake",
     "ruff",
+    "httpx",
+    "aiosqlite",
+    "python-jose",
+    "passlib[bcrypt]",
 ]
 
 [tool.setuptools.packages.find]

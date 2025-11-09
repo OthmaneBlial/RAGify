@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 import logging
 
-from backend.core.database import get_db
+from backend.core.database import get_db, normalize_uuid
 from backend.modules.applications.crud import (
     create_application,
     get_application_with_config,
@@ -469,7 +469,7 @@ async def delete_application_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if doc.application_id != app_id:
+    if normalize_uuid(doc.application_id) != normalize_uuid(app_id):
         raise HTTPException(
             status_code=403, detail="Document does not belong to this application"
         )
