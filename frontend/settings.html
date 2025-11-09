@@ -37,16 +37,34 @@
     <!-- Navigation -->
     <nav class="bg-white/90 backdrop-blur border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-20">
-                <div class="flex items-center">
-                    <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
+            <div class="flex items-center justify-between h-20">
+                <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
+                <div class="hidden md:flex items-center gap-2">
+                    <a data-nav-link href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
+                    <a data-nav-link href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
+                    <a data-nav-link href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
+                    <a data-nav-link href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
                 </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
-                    <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
-                    <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
-                    <a href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
-                </div>
+                <button
+                    type="button"
+                    class="md:hidden inline-flex items-center justify-center p-2 rounded-full text-gray-600 hover:text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    aria-expanded="false"
+                    data-nav-toggle
+                >
+                    <span class="sr-only">Toggle navigation</span>
+                    <svg data-open-icon class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                    <svg data-close-icon class="h-6 w-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="md:hidden hidden flex flex-col gap-2 pt-4 pb-6 border-t border-gray-100" data-nav-panel>
+                <a data-nav-link href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
+                <a data-nav-link href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
+                <a data-nav-link href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
+                <a data-nav-link href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
             </div>
         </div>
     </nav>
@@ -163,6 +181,61 @@
             </div>
         </div>
     </div>
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const toggle = document.querySelector('[data-nav-toggle]');
+            const panel = document.querySelector('[data-nav-panel]');
+            const openIcon = toggle?.querySelector('[data-open-icon]');
+            const closeIcon = toggle?.querySelector('[data-close-icon]');
+
+            if (toggle && panel) {
+                toggle.addEventListener('click', () => {
+                    panel.classList.toggle('hidden');
+                    const expanded = !panel.classList.contains('hidden');
+                    toggle.setAttribute('aria-expanded', expanded.toString());
+                    if (openIcon && closeIcon) {
+                        openIcon.classList.toggle('hidden', expanded);
+                        closeIcon.classList.toggle('hidden', !expanded);
+                    }
+                });
+
+                panel.querySelectorAll('[data-nav-link]').forEach((link) => {
+                    link.addEventListener('click', () => {
+                        panel.classList.add('hidden');
+                        toggle.setAttribute('aria-expanded', 'false');
+                        if (openIcon && closeIcon) {
+                            openIcon.classList.remove('hidden');
+                            closeIcon.classList.add('hidden');
+                        }
+                    });
+                });
+            }
+
+            const normalizePath = (href) => {
+                if (!href) return '/';
+                const url = new URL(href, window.location.origin);
+                let pathname = url.pathname;
+                if (pathname.endsWith('index.html')) {
+                    pathname = pathname.replace('index.html', '');
+                }
+                if (pathname.length > 1 && pathname.endsWith('/')) {
+                    pathname = pathname.slice(0, -1);
+                }
+                return pathname || '/';
+            };
+
+            const currentPath = normalizePath(window.location.pathname);
+
+            document.querySelectorAll('[data-nav-link]').forEach((link) => {
+                const targetPath = normalizePath(link.getAttribute('href'));
+                if (currentPath === targetPath || (targetPath !== '/' && currentPath.startsWith(targetPath))) {
+                    link.classList.add('text-blue-600', 'bg-blue-50', 'shadow-sm');
+                    link.classList.remove('text-gray-600');
+                    link.setAttribute('aria-current', 'page');
+                }
+            });
+        });
+    </script>
 
     <script>
         const CLOUD_RUN_HOST_PATTERN = /run\.app|cloud\.run|appspot\.com|googleusercontent\.com/;
