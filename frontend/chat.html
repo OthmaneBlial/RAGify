@@ -133,22 +133,61 @@
             background-color: #e5e7eb;
             color: #111827;
         }
+
+        @media (max-width: 900px) {
+            #messages {
+                padding: 1.5rem;
+            }
+
+            #messageInput {
+                width: 100%;
+            }
+        }
+
+        @media (max-width: 640px) {
+            nav .flex {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+
+            .h-[650px] {
+                min-height: calc(100vh - 4rem);
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
     <!-- Navigation -->
     <nav class="bg-white/90 backdrop-blur border-b border-gray-100">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-20">
-                <div class="flex items-center">
-                    <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
+            <div class="flex items-center justify-between h-20">
+                <a href="/" class="text-2xl font-bold text-gray-900 tracking-tight">RAGify</a>
+                <div class="hidden md:flex items-center gap-2">
+                    <a data-nav-link href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
+                    <a data-nav-link href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
+                    <a data-nav-link href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
+                    <a data-nav-link href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <a href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
-                    <a href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
-                    <a href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
-                    <a href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
-                </div>
+                <button
+                    type="button"
+                    class="md:hidden inline-flex items-center justify-center p-2 rounded-full text-gray-600 hover:text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                    aria-expanded="false"
+                    data-nav-toggle
+                >
+                    <span class="sr-only">Toggle navigation</span>
+                    <svg data-open-icon class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                    <svg data-close-icon class="h-6 w-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="md:hidden hidden flex flex-col gap-2 pt-4 pb-6 border-t border-gray-100" data-nav-panel>
+                <a data-nav-link href="/" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Home</a>
+                <a data-nav-link href="/chat.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Chat</a>
+                <a data-nav-link href="/knowledge.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Knowledge Base</a>
+                <a data-nav-link href="/settings.html" class="text-gray-600 hover:text-blue-600 px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200">Settings</a>
             </div>
         </div>
     </nav>
@@ -198,8 +237,74 @@
     </div>
 
     <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const toggle = document.querySelector('[data-nav-toggle]');
+            const panel = document.querySelector('[data-nav-panel]');
+            const openIcon = toggle?.querySelector('[data-open-icon]');
+            const closeIcon = toggle?.querySelector('[data-close-icon]');
+
+            if (toggle && panel) {
+                toggle.addEventListener('click', () => {
+                    panel.classList.toggle('hidden');
+                    const expanded = !panel.classList.contains('hidden');
+                    toggle.setAttribute('aria-expanded', expanded.toString());
+                    if (openIcon && closeIcon) {
+                        openIcon.classList.toggle('hidden', expanded);
+                        closeIcon.classList.toggle('hidden', !expanded);
+                    }
+                });
+
+                panel.querySelectorAll('[data-nav-link]').forEach((link) => {
+                    link.addEventListener('click', () => {
+                        panel.classList.add('hidden');
+                        toggle.setAttribute('aria-expanded', 'false');
+                        if (openIcon && closeIcon) {
+                            openIcon.classList.remove('hidden');
+                            closeIcon.classList.add('hidden');
+                        }
+                    });
+                });
+            }
+
+            const normalizePath = (href) => {
+                if (!href) return '/';
+                const url = new URL(href, window.location.origin);
+                let pathname = url.pathname;
+                if (pathname.endsWith('index.html')) {
+                    pathname = pathname.replace('index.html', '');
+                }
+                if (pathname.length > 1 && pathname.endsWith('/')) {
+                    pathname = pathname.slice(0, -1);
+                }
+                return pathname || '/';
+            };
+
+            const currentPath = normalizePath(window.location.pathname);
+
+            document.querySelectorAll('[data-nav-link]').forEach((link) => {
+                const targetPath = normalizePath(link.getAttribute('href'));
+                if (currentPath === targetPath || (targetPath !== '/' && currentPath.startsWith(targetPath))) {
+                    link.classList.add('text-blue-600', 'bg-blue-50', 'shadow-sm');
+                    link.classList.remove('text-gray-600');
+                    link.setAttribute('aria-current', 'page');
+                }
+            });
+        });
+    </script>
+
+    <script>
+        const CLOUD_RUN_HOST_PATTERN = /run\.app|cloud\.run|appspot\.com|googleusercontent\.com/;
+
+        function isCloudRunEnvironment(hostname = window.location.hostname) {
+            return CLOUD_RUN_HOST_PATTERN.test(hostname);
+        }
+
         function resolveApiBase() {
             const { protocol, hostname, port } = window.location;
+            if (isCloudRunEnvironment(hostname)) {
+                return `${protocol}//${hostname}`;
+            }
+
             const portMapping = new Map([
                 ['5173', '8000'],
                 ['15173', '18000'],
@@ -210,9 +315,11 @@
             return `${protocol}//${hostname}:${targetPort}`;
         }
 
+        const IS_CLOUD_RUN = isCloudRunEnvironment();
         const API_BASE = resolveApiBase();
         let currentApplicationId = null;
         let currentModelInfo = null;
+        let openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
 
         function extractModelInfoFromMetadata(metadata) {
             if (!metadata) {
@@ -443,17 +550,24 @@
             showStatus('AI is thinking...');
 
             try {
+                const requestBody = {
+                    message: message,
+                    application_id: currentApplicationId,
+                    model_name: currentModelInfo ? currentModelInfo.name : null,
+                    provider: currentModelInfo ? currentModelInfo.provider : null,
+                };
+
+                // Add API key for Cloud Run deployments
+                if (IS_CLOUD_RUN && openRouterApiKey) {
+                    requestBody.api_key = openRouterApiKey;
+                }
+
                 const response = await fetch(`${API_BASE}/api/v1/chat/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        message: message,
-                        application_id: currentApplicationId,
-                        model_name: currentModelInfo ? currentModelInfo.name : null,
-                        provider: currentModelInfo ? currentModelInfo.provider : null,
-                    }),
+                    body: JSON.stringify(requestBody),
                 });
 
                 if (response.ok) {
@@ -563,9 +677,133 @@
             }
         }
 
+        const CLOUD_RUN_KEY_MODAL_ID = 'cloudRunKeyModal';
+        const CLOUD_RUN_KEY_INPUT_ID = 'cloudRunKeyInput';
+        const CLOUD_RUN_KEY_ERROR_ID = 'cloudRunKeyError';
+        let cloudRunKeyResolver = null;
+
+        function configureCloudRunApiKey(key) {
+            openRouterApiKey = key;
+            localStorage.setItem('openrouter_api_key', key);
+            resolveCloudRunKeyPromise();
+            hideCloudRunModal();
+        }
+
+        function resolveCloudRunKeyPromise() {
+            if (typeof cloudRunKeyResolver === 'function') {
+                cloudRunKeyResolver();
+                cloudRunKeyResolver = null;
+            }
+        }
+
+        function waitForCloudRunApiKey() {
+            if (!IS_CLOUD_RUN) {
+                return Promise.resolve();
+            }
+
+            openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
+            if (openRouterApiKey) {
+                return Promise.resolve();
+            }
+
+            showCloudRunModal();
+            return new Promise((resolve) => {
+                cloudRunKeyResolver = resolve;
+            });
+        }
+
+        function showCloudRunModal() {
+            const modal = createCloudRunModal();
+            if (!modal) return;
+            const panel = modal.querySelector('.cloud-run-modal-panel');
+            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
+            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
+            if (input) {
+                input.value = openRouterApiKey || '';
+                input.focus();
+            }
+            if (error) {
+                error.classList.add('hidden');
+            }
+            document.body.classList.add('overflow-hidden');
+            modal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                panel?.classList.remove('scale-95', 'opacity-0');
+            });
+        }
+
+        function hideCloudRunModal() {
+            const modal = document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
+            if (!modal) {
+                return;
+            }
+            const panel = modal.querySelector('.cloud-run-modal-panel');
+            if (panel) {
+                panel.classList.add('scale-95', 'opacity-0');
+            }
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }, 200);
+        }
+
+        function handleCloudRunKeySave() {
+            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
+            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
+            if (!input || !error) {
+                return;
+            }
+            const key = input.value.trim();
+            if (!key) {
+                error.textContent = 'Please enter your OpenRouter API key';
+                error.classList.remove('hidden');
+                return;
+            }
+            error.classList.add('hidden');
+            configureCloudRunApiKey(key);
+        }
+
+        function createCloudRunModal() {
+            if (document.getElementById(CLOUD_RUN_KEY_MODAL_ID)) {
+                return document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
+            }
+
+            const modal = document.createElement('div');
+            modal.id = CLOUD_RUN_KEY_MODAL_ID;
+            modal.className = 'fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 py-6';
+            modal.innerHTML = `
+                <div class="cloud-run-modal-panel max-w-lg w-full bg-white rounded-3xl p-6 shadow-2xl transform scale-95 opacity-0 transition-all duration-200 space-y-4">
+                    <h3 class="text-xl font-semibold text-gray-900">OpenRouter API Key Required</h3>
+                    <p class="text-sm text-gray-600">This Cloud Run deployment needs your OpenRouter API key so the AI backend can respond to your requests. The key is stored only in your browser.</p>
+                    <input id="${CLOUD_RUN_KEY_INPUT_ID}" type="password" autocomplete="off" placeholder="sk-openrouter-..." class="w-full border border-blue-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
+                    <p id="${CLOUD_RUN_KEY_ERROR_ID}" class="text-xs text-rose-500 hidden">Please enter your OpenRouter API key</p>
+                    <div class="flex flex-col gap-3">
+                        <button id="cloudRunKeySaveBtn" class="w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 transition">Save API Key</button>
+                        <button id="cloudRunKeySettingsBtn" class="w-full text-sm text-blue-600 hover:underline">Go to Settings to manage API keys</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector('#cloudRunKeySaveBtn')?.addEventListener('click', handleCloudRunKeySave);
+            modal.querySelector('#cloudRunKeySettingsBtn')?.addEventListener('click', () => {
+                window.location.href = '/settings.html';
+            });
+            const input = modal.querySelector(`#${CLOUD_RUN_KEY_INPUT_ID}`);
+            if (input) {
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleCloudRunKeySave();
+                    }
+                });
+            }
+            return modal;
+        }
+
         window.onload = async function () {
             currentApplicationId = localStorage.getItem('currentApplicationId');
 
+            await waitForCloudRunApiKey();
             await loadCurrentModel();
             updateModelDisplay();
 

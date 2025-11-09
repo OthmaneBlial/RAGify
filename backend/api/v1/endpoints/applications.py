@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Dict, Any, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field
 import logging
 
-from backend.core.database import get_db
+from backend.core.database import get_db, normalize_uuid
 from backend.modules.applications.crud import (
     create_application,
     get_application_with_config,
@@ -359,7 +359,7 @@ async def associate_knowledge_bases(
 # Application-specific document endpoints
 @router.post("/{app_id}/documents/", response_model=Document)
 async def upload_document_to_application(
-    app_id: UUID, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
+    app_id: UUID, file: UploadFile = File(...), api_key: Optional[str] = Form(None), db: AsyncSession = Depends(get_db)
 ):
     """
     Upload a document to a specific application.
@@ -469,7 +469,7 @@ async def delete_application_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    if doc.application_id != app_id:
+    if normalize_uuid(doc.application_id) != normalize_uuid(app_id):
         raise HTTPException(
             status_code=403, detail="Document does not belong to this application"
         )

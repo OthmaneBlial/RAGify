@@ -39,12 +39,38 @@ print_header() {
 }
 
 # Check if required tools are available
+resolve_python_bin() {
+    if command -v pyenv >/dev/null 2>&1; then
+        local pyenv_python
+        pyenv_python=$(pyenv which python3 2>/dev/null || true)
+        if [[ -n "$pyenv_python" && -x "$pyenv_python" ]]; then
+            echo "$pyenv_python"
+            return
+        fi
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        echo "$(command -v python3)"
+        return
+    fi
+
+    if command -v python >/dev/null 2>&1; then
+        echo "$(command -v python)"
+        return
+    fi
+
+    echo ""
+}
+
 check_requirements() {
     print_header "Checking Requirements"
 
     local missing_tools=()
 
-    if ! command -v python3 &> /dev/null; then
+    local python_bin
+    python_bin=$(resolve_python_bin)
+
+    if [[ -z "$python_bin" ]]; then
         missing_tools+=("python3")
     fi
 
@@ -66,15 +92,30 @@ setup_python() {
     print_header "Setting up Python Environment"
 
     print_status "Creating virtual environment..."
-    python3 -m venv venv
+
+    if [[ -d "venv" ]]; then
+        print_status "Removing existing virtual environment..."
+        rm -rf venv
+    fi
+
+    local python_bin
+    python_bin=$(resolve_python_bin)
+
+    if [[ -z "$python_bin" ]]; then
+        print_error "Could not find a suitable Python interpreter (python3/python)"
+        exit 1
+    fi
+
+    print_status "Using Python interpreter at $python_bin"
+    "$python_bin" -m venv venv
     source venv/bin/activate
 
     print_status "Upgrading pip..."
     pip install --upgrade pip
 
     print_status "Installing Python dependencies..."
-    pip install -e .
-    pip install pytest pytest-cov pytest-asyncio black isort flake8 build twine setuptools wheel
+    pip install -e ".[dev]"
+    pip install build twine setuptools wheel
 
     print_success "Python environment set up"
 }

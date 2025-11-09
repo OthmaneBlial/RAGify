@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Dict, Optional, List, AsyncGenerator
+from typing import Any, Dict, Optional, List, AsyncGenerator
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
 
@@ -14,6 +14,7 @@ from shared.models.Model import (
     ProviderSettings,
     TestConnectionRequest,
     TestConnectionResponse,
+    ModelInfo,
 )
 from backend.core.config import settings
 
@@ -191,6 +192,21 @@ class ModelManager:
         finally:
             pass  # Provider session management handled by provider itself
 
+    @asynccontextmanager
+    async def _temporary_provider_context(
+        self, provider_type: ProviderType, api_key: str
+    ):
+        """Context manager for a temporary provider with a custom API key."""
+        try:
+            provider_cls = get_provider_class(provider_type)
+        except KeyError as exc:
+            raise ValueError(f"Provider {provider_type} not supported") from exc
+
+        provider_settings = ProviderSettings(api_key=api_key)
+        provider = provider_cls(provider_settings)
+        async with provider:
+            yield provider
+
     async def generate_text(
         self, request: GenerationRequest, retry_on_rate_limit: bool = True
     ) -> GenerationResponse:
@@ -198,39 +214,42 @@ class ModelManager:
         provider_type = request.model_configuration.provider
         provider = await self.get_provider(provider_type)
 
-        if not provider:
-            raise ValueError(f"Provider {provider_type} not configured")
+        if provider:
+            max_retries = 3 if retry_on_rate_limit else 1
+            last_exception = None
 
-        max_retries = 3 if retry_on_rate_limit else 1
-        last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    async with self.provider_context(provider_type):
+                        response = await provider.generate(request)
 
-        for attempt in range(max_retries):
-            try:
-                async with self.provider_context(provider_type):
-                    response = await provider.generate(request)
+                        if provider_type in self.rate_limits:
+                            self.rate_limits[provider_type].requests_made += 1
 
-                    # Update rate limit info
-                    if provider_type in self.rate_limits:
-                        self.rate_limits[provider_type].requests_made += 1
+                        return response
 
-                    return response
+                except Exception as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
 
-            except Exception as e:
-                last_exception = e
-                error_msg = str(e).lower()
+                    if "rate limit" in error_msg or "429" in error_msg:
+                        if attempt < max_retries - 1 and retry_on_rate_limit:
+                            wait_time = 2 ** attempt
+                            logger.warning(f"Rate limit hit, retrying in {wait_time}s")
+                            await asyncio.sleep(wait_time)
+                            continue
 
-                # Check for rate limit errors
-                if "rate limit" in error_msg or "429" in error_msg:
-                    if attempt < max_retries - 1 and retry_on_rate_limit:
-                        wait_time = 2**attempt  # Exponential backoff
-                        logger.warning(f"Rate limit hit, retrying in {wait_time}s")
-                        await asyncio.sleep(wait_time)
-                        continue
+                    break
 
-                # For other errors, don't retry
-                break
+            raise last_exception or Exception("Generation failed after retries")
 
-        raise last_exception or Exception("Generation failed after retries")
+        if request.model_configuration.api_key:
+            async with self._temporary_provider_context(
+                provider_type, request.model_configuration.api_key
+            ) as temp_provider:
+                return await temp_provider.generate(request)
+
+        raise ValueError(f"Provider {provider_type} not configured")
 
     async def generate_text_stream(
         self, request: GenerationRequest
@@ -239,12 +258,21 @@ class ModelManager:
         provider_type = request.model_configuration.provider
         provider = await self.get_provider(provider_type)
 
-        if not provider:
-            raise ValueError(f"Provider {provider_type} not configured")
+        if provider:
+            async with self.provider_context(provider_type):
+                async for chunk in provider.generate_stream(request):
+                    yield chunk
+            return
 
-        async with self.provider_context(provider_type):
-            async for chunk in provider.generate_stream(request):
-                yield chunk
+        if request.model_configuration.api_key:
+            async with self._temporary_provider_context(
+                provider_type, request.model_configuration.api_key
+            ) as temp_provider:
+                async for chunk in temp_provider.generate_stream(request):
+                    yield chunk
+            return
+
+        raise ValueError(f"Provider {provider_type} not configured")
 
     async def test_connection(
         self, request: TestConnectionRequest
@@ -266,53 +294,76 @@ class ModelManager:
             return await provider.test_connection(request)
 
     async def get_available_models(
-        self, provider_type: Optional[ProviderType] = None
-    ) -> List[Dict]:
+        self,
+        provider_type: Optional[ProviderType] = None,
+        api_key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """Get list of available models."""
         if not self._initialized:
             await self.initialize()
 
-        models: List[Dict] = []
+        models: List[Dict[str, Any]] = []
 
         if provider_type:
-            providers_to_check = (
-                [provider_type] if provider_type in self.providers else []
-            )
+            providers_to_check = [provider_type]
         else:
             providers_to_check = list(self.providers.keys())
 
         for p_type in providers_to_check:
-            provider = await self.get_provider(p_type)
-            if not provider:
-                continue
-
+            provider_models: List[ModelInfo] = []
             try:
-                provider_models = await provider.get_available_models()
+                if p_type in self.providers:
+                    provider = await self.get_provider(p_type)
+                    if not provider:
+                        continue
+                    provider_models = await provider.get_available_models()
+                elif api_key:
+                    provider_models = await self._fetch_models_with_temporary_provider(
+                        p_type, api_key
+                    )
+                else:
+                    continue
             except Exception as exc:
                 logger.error(
                     "Failed to retrieve models for provider %s: %s", p_type.value, exc
                 )
                 continue
 
-            for model_info in provider_models:
-                models.append(
-                    {
-                        "name": model_info.name,
-                        "provider": model_info.provider.value,
-                        "context_window": model_info.context_window,
-                        "supports_streaming": model_info.supports_streaming,
-                        "description": model_info.description,
-                        "display_name": model_info.display_name,
-                        "pricing_prompt": model_info.pricing_prompt,
-                        "pricing_completion": model_info.pricing_completion,
-                        "tags": model_info.tags,
-                        "is_free": model_info.is_free,
-                    }
-                )
+            models.extend(
+                self._model_info_to_dict(model_info)
+                for model_info in provider_models
+            )
 
-        models.sort(key=lambda m: (m.get("provider"), not m.get("is_free"), (m.get("display_name") or m.get("name") or "").lower()))
+        models.sort(
+            key=lambda m: (
+                m.get("provider"),
+                not m.get("is_free"),
+                (m.get("display_name") or m.get("name") or "").lower(),
+            )
+        )
 
         return models
+
+    @staticmethod
+    def _model_info_to_dict(model_info: ModelInfo) -> Dict[str, Any]:
+        return {
+            "name": model_info.name,
+            "provider": model_info.provider.value,
+            "context_window": model_info.context_window,
+            "supports_streaming": model_info.supports_streaming,
+            "description": model_info.description,
+            "display_name": model_info.display_name,
+            "pricing_prompt": model_info.pricing_prompt,
+            "pricing_completion": model_info.pricing_completion,
+            "tags": model_info.tags,
+            "is_free": model_info.is_free,
+        }
+
+    async def _fetch_models_with_temporary_provider(
+        self, provider_type: ProviderType, api_key: str
+    ) -> List[ModelInfo]:
+        async with self._temporary_provider_context(provider_type, api_key) as provider:
+            return await provider.get_available_models()
 
     def estimate_cost(
         self, tokens_used: int, model_name: str, provider_type: ProviderType
@@ -333,11 +384,13 @@ class ModelManager:
         self, provider_type: ProviderType, model_name: str, **kwargs
     ) -> ModelConfig:
         """Create a model configuration."""
+        # Use provided API key if available (for Cloud Run), otherwise use settings
+        api_key = kwargs.get('api_key') or getattr(settings, f"{provider_type.value}_api_key", None)
         return ModelConfig(
             provider=provider_type,
             model_name=model_name,
-            api_key=getattr(settings, f"{provider_type.value}_api_key", None),
-            **kwargs,
+            api_key=api_key,
+            **{k: v for k, v in kwargs.items() if k != 'api_key'},  # Remove api_key from kwargs to avoid duplication
         )
 
     async def close(self):

@@ -25,18 +25,21 @@ router = APIRouter()
 
 
 @router.get("/", response_model=List[Dict[str, Any]])
-async def list_available_models(provider: Optional[ProviderType] = None):
+async def list_available_models(provider: Optional[ProviderType] = None, api_key: Optional[str] = None):
     """
     Get list of available models.
 
     Args:
         provider: Optional provider filter
+        api_key: Optional API key to use for OpenRouter (for Cloud Run deployments)
 
     Returns:
         List of available models with metadata
     """
     try:
-        models = await model_manager.get_available_models(provider)
+        if api_key and provider != ProviderType.OPENROUTER:
+            api_key = None
+        models = await model_manager.get_available_models(provider, api_key=api_key)
         return models
     except Exception as e:
         logger.error(f"Error listing models: {e}")

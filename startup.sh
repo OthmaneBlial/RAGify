@@ -5,6 +5,42 @@ if [ -f "$SCRIPT_DIR/venv/bin/activate" ]; then
   source "$SCRIPT_DIR/venv/bin/activate"
 fi
 
+REDIS_DOCKER_CONTAINER="${REDIS_DOCKER_CONTAINER:-ragify-redis-1}"
+REDIS_DOCKER_PORT="${REDIS_DOCKER_PORT:-16379}"
+
+ensure_docker_redis_container() {
+    if ! command -v docker >/dev/null 2>&1; then
+        return 1
+    fi
+
+    local container_status
+    container_status=$(docker inspect -f '{{.State.Status}}' "$REDIS_DOCKER_CONTAINER" 2>/dev/null || true)
+
+    if [ "$container_status" = "running" ]; then
+        echo "Redis container $REDIS_DOCKER_CONTAINER already running."
+        return 0
+    fi
+
+    if [ -n "$container_status" ]; then
+        echo "Starting existing Redis container $REDIS_DOCKER_CONTAINER..."
+        if docker start "$REDIS_DOCKER_CONTAINER" >/dev/null; then
+            echo "Redis container $REDIS_DOCKER_CONTAINER started."
+            return 0
+        fi
+        echo "Failed to start Redis container $REDIS_DOCKER_CONTAINER."
+        return 1
+    fi
+
+    echo "Creating Redis container $REDIS_DOCKER_CONTAINER on port $REDIS_DOCKER_PORT..."
+    if docker run -d --name "$REDIS_DOCKER_CONTAINER" -p "${REDIS_DOCKER_PORT}:6379" redis:7-alpine >/dev/null; then
+        echo "Redis container $REDIS_DOCKER_CONTAINER launched."
+        return 0
+    fi
+
+    echo "Failed to create Redis container $REDIS_DOCKER_CONTAINER."
+    return 1
+}
+
 # Kill processes already using ports 8000 and 5173
 for port in 8000 5173; do
   pid=$(lsof -t -i :$port || true)
@@ -25,10 +61,32 @@ if [ -z "${DATABASE_URL:-}" ]; then
         1)
             export DATABASE_URL="sqlite+aiosqlite:///./ragify.db"
             echo "Using SQLite (file-based) database at ./ragify.db"
+            if [ -f "$SCRIPT_DIR/ragify.db" ]; then
+                echo "Removing stale SQLite database file..."
+                rm -f "$SCRIPT_DIR/ragify.db"
+            fi
             ;;
         2)
-            export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@localhost/ragify"
-            echo "Using PostgreSQL database"
+            POSTGRES_HOST="localhost"
+            POSTGRES_PORT="5432"
+            if python3 - <<'PY' >/dev/null 2>&1
+import socket
+import sys
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.2)
+try:
+    sock.connect(("127.0.0.1", 15432))
+    sock.close()
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+            then
+                POSTGRES_PORT="15432"
+                echo "Detected Dockerized PostgreSQL on port 15432"
+            fi
+            export DATABASE_URL="postgresql+asyncpg://ragify:RagifyStrongPass2023@${POSTGRES_HOST}:${POSTGRES_PORT}/ragify"
+            echo "Using PostgreSQL database at ${POSTGRES_HOST}:${POSTGRES_PORT}"
             ;;
         *)
             echo "Invalid choice. Using SQLite (file-based) as default."
@@ -39,26 +97,95 @@ else
     echo "Using DATABASE_URL from environment: $DATABASE_URL"
 fi
 
+is_sqlite=0
+if [[ "$DATABASE_URL" == sqlite+aiosqlite* ]]; then
+    is_sqlite=1
+fi
+
+if (( is_sqlite )); then
+    export REDIS_URL=""
+    echo "SQLite selected; Redis caching disabled (REDIS_URL cleared)."
+else
+    redis_candidates=()
+    redis_candidate_source="auto"
+    if [ -n "${REDIS_URL:-}" ]; then
+        redis_candidates+=("$REDIS_URL")
+        redis_candidate_source="env"
+    else
+        redis_candidates+=("redis://localhost:${REDIS_DOCKER_PORT}/0")
+        if [ "$REDIS_DOCKER_PORT" -ne 6379 ]; then
+            redis_candidates+=("redis://localhost:6379/0")
+        fi
+        if [ "$REDIS_DOCKER_PORT" -ne 16379 ]; then
+            redis_candidates+=("redis://localhost:16379/0")
+        fi
+        if ! ensure_docker_redis_container; then
+            echo "Could not automatically start Docker Redis container $REDIS_DOCKER_CONTAINER."
+        fi
+    fi
+
+    redis_chosen=""
+    for candidate in "${redis_candidates[@]}"; do
+        if [ -z "$candidate" ]; then
+            continue
+        fi
+        if REDIS_CANDIDATE="$candidate" python3 - <<'PY' >/dev/null 2>&1
+import os
+import socket
+from urllib.parse import urlparse
+candidate = os.environ.get("REDIS_CANDIDATE")
+if not candidate:
+    raise SystemExit(1)
+parsed = urlparse(candidate)
+if not parsed.hostname:
+    raise SystemExit(1)
+host = parsed.hostname
+port = parsed.port or 6379
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.5)
+try:
+    sock.connect((host, port))
+    sock.close()
+    raise SystemExit(0)
+except Exception:
+    raise SystemExit(1)
+PY
+        then
+            redis_chosen="$candidate"
+            break
+        fi
+    done
+
+    if [ -n "$redis_chosen" ]; then
+        export REDIS_URL="$redis_chosen"
+        echo "Using Redis at $REDIS_URL"
+    else
+        if [ "$redis_candidate_source" = "env" ]; then
+            echo "Could not connect to Redis at ${redis_candidates[0]}"
+        else
+            echo "Redis is required for PostgreSQL but no local instance was reachable (checked ports 6379 and 16379)."
+        fi
+        echo "Start Redis (e.g., 'docker start ragify-redis-local' or 'docker compose up -d redis') or set REDIS_URL."
+        exit 1
+    fi
+fi
+
 echo "Starting RAGify..."
 
-# For SQLite file-based, initialize database and create default application
-if [[ "$DATABASE_URL" == sqlite+aiosqlite* ]]; then
-    echo "Initializing SQLite database..."
-    PYTHONPATH=/home/othmane/projects/RAGify python3 -c "
-import asyncio
-import sys
+echo "Ensuring database schema and default application exist..."
+PYTHONPATH=/home/othmane/projects/RAGify python3 -c "
+import asyncio, sys
 sys.path.insert(0, '/home/othmane/projects/RAGify')
 
 from backend.core.database import engine, get_db_session
 from backend.modules.knowledge.models import Base
-from backend.modules.applications.models import Application, ApplicationVersion, ChatMessage
 from backend.modules.applications.crud import create_application, list_applications
 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        print('Tables created')
-    
+        print('Tables created for current database')
+
     async with get_db_session() as db:
         apps = await list_applications(db)
         if not apps:
@@ -75,6 +202,27 @@ async def init_db():
 
 asyncio.run(init_db())
 "
+
+if [[ "$DATABASE_URL" == postgresql+asyncpg* ]]; then
+    echo "Ensuring PostgreSQL vector schema/extension..."
+    python3 - <<'PY'
+import asyncio, os
+import asyncpg
+
+dsn = os.environ["DATABASE_URL"].replace("postgresql+asyncpg", "postgresql")
+
+async def prepare_vector():
+    conn = await asyncpg.connect(dsn=dsn)
+    try:
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS text")
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA text")
+        print("Vector extension ensured in schema 'text'")
+    finally:
+        await conn.close()
+
+asyncio.run(prepare_vector())
+PY
+
 fi
 
 # Start backend
