@@ -55,3 +55,21 @@ class ChatMessage(Base):
         default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
         onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
     )
+
+
+class IPUsage(Base):
+    __tablename__ = "ip_usage"
+
+    id = Column(UUIDType, primary_key=True, default=lambda: str(uuid4()))
+    ip_address = Column(String, nullable=False, index=True)
+    request_count = Column(String, nullable=False, default="0")
+    last_request_at = Column(DateTime, nullable=True)
+    created_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )

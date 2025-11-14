@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
@@ -6,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 
 from backend.core.database import normalize_uuid
-from .models import Application, ApplicationVersion, ChatMessage
+from .models import Application, ApplicationVersion, ChatMessage, IPUsage
 
 
 # Application CRUD Operations
@@ -429,3 +430,70 @@ async def clear_chat_history(db: AsyncSession, application_id: UUID) -> int:
     )
     await db.commit()
     return result.rowcount or 0
+
+
+FREE_TRIAL_REQUEST_LIMIT = 20
+
+
+async def get_ip_usage(
+    db: AsyncSession, ip_address: Optional[str]
+) -> Optional[IPUsage]:
+    """Retrieve IP usage data for a specific IP address."""
+    if not ip_address:
+        return None
+
+    result = await db.execute(select(IPUsage).where(IPUsage.ip_address == ip_address))
+    return result.scalar_one_or_none()
+
+
+async def get_or_create_ip_usage(db: AsyncSession, ip_address: str) -> IPUsage:
+    """Get IP usage record or create one if it does not exist."""
+    usage = await get_ip_usage(db, ip_address)
+    if usage:
+        return usage
+
+    usage = IPUsage(ip_address=ip_address)
+    db.add(usage)
+    await db.commit()
+    await db.refresh(usage)
+
+    return usage
+
+
+async def increment_ip_request_count(db: AsyncSession, ip_address: str) -> IPUsage:
+    """Increment the request counter for an IP address."""
+    usage = await get_or_create_ip_usage(db, ip_address)
+    current_count = 0
+    try:
+        current_count = int(usage.request_count or "0")
+    except ValueError:
+        current_count = 0
+
+    current_count += 1
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    usage.request_count = str(current_count)
+    usage.last_request_at = now
+    usage.updated_at = now
+
+    db.add(usage)
+    await db.commit()
+    await db.refresh(usage)
+
+    return usage
+
+
+async def can_ip_make_more_requests(
+    db: AsyncSession, ip_address: str, limit: int = FREE_TRIAL_REQUEST_LIMIT
+) -> bool:
+    """Check if an IP address is still under the free request limit."""
+    usage = await get_ip_usage(db, ip_address)
+    if not usage:
+        return True
+
+    try:
+        current_count = int(usage.request_count or "0")
+    except ValueError:
+        current_count = 0
+
+    return current_count < limit

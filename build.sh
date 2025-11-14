@@ -55,9 +55,11 @@ fi
 
 IMAGE_NAME="${IMAGE_NAME:-ragify}"
 SERVICE_NAME="${SERVICE_NAME:-ragify}"
+# Prefer the Europe region for lower latency and compliance.
 REGION="${REGION:-europe-west1}"
 CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8000}"
 CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-2Gi}"
+# Use 2 CPUs with one warm instance to keep Cloud Run responsive.
 CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-2}"
 CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-1}"
 IMAGE_URI="gcr.io/${PROJECT_ID}/${IMAGE_NAME}"
