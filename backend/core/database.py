@@ -95,10 +95,14 @@ else:
 # Register event listener after engine is created
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
-    """Enable foreign key constraints for SQLite."""
+    """Enable foreign key constraints and performance optimizations for SQLite."""
     if is_sqlite:
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA journal_mode=WAL")  # Write-Ahead Logging for better concurrency
+        cursor.execute("PRAGMA synchronous=NORMAL")  # Balance between speed and safety
+        cursor.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        cursor.execute("PRAGMA temp_store=MEMORY")  # Store temp tables in memory
         cursor.close()
 
 AsyncSessionLocal = sessionmaker(

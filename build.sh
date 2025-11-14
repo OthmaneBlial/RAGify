@@ -55,10 +55,11 @@ fi
 
 IMAGE_NAME="${IMAGE_NAME:-ragify}"
 SERVICE_NAME="${SERVICE_NAME:-ragify}"
-REGION="${REGION:-us-central1}"
+REGION="${REGION:-europe-west1}"
 CLOUD_RUN_PORT="${CLOUD_RUN_PORT:-8000}"
 CLOUD_RUN_MEMORY="${CLOUD_RUN_MEMORY:-2Gi}"
-CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-1}"
+CLOUD_RUN_CPU="${CLOUD_RUN_CPU:-2}"
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-1}"
 IMAGE_URI="gcr.io/${PROJECT_ID}/${IMAGE_NAME}"
 BASE_IMAGE_NAME="${BASE_IMAGE_NAME:-ragify-backend-base}"
 BASE_IMAGE_URI="${BASE_IMAGE_URI:-gcr.io/${PROJECT_ID}/${BASE_IMAGE_NAME}:latest}"
@@ -172,6 +173,7 @@ gcloud run deploy "${SERVICE_NAME}" \
   --port "${CLOUD_RUN_PORT}" \
   --memory "${CLOUD_RUN_MEMORY}" \
   --cpu "${CLOUD_RUN_CPU}" \
+  --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
   --env-vars-file "${TEMP_ENV_FILE}" \
   --quiet
 
