@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Any, Optional, AsyncGenerator
@@ -7,12 +7,16 @@ from pydantic import BaseModel, Field
 import logging
 
 from backend.core.database import get_db
+from backend.core.config import settings
 from backend.modules.applications.crud import (
     get_application_with_config,
     get_application_knowledge_bases,
     create_chat_message,
     get_application_chat_history,
     clear_chat_history,
+    can_ip_make_more_requests,
+    increment_ip_request_count,
+    FREE_TRIAL_REQUEST_LIMIT,
 )
 from backend.modules.rag.rag_pipeline import streaming_rag_pipeline, RAGQuery
 
@@ -61,9 +65,49 @@ class ConversationHistoryRequest(BaseModel):
     )
 
 
+def extract_client_ip(http_request: Request) -> Optional[str]:
+    forwarded_for = http_request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        parts = [ip.strip() for ip in forwarded_for.split(",")]
+        if parts:
+            return parts[0]
+
+    real_ip = http_request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+
+    if http_request.client:
+        return http_request.client.host
+
+    return None
+
+
+async def enforce_free_trial_limit(
+    db: AsyncSession, client_ip: Optional[str], has_user_key: bool
+):
+    if not client_ip:
+        return
+
+    if settings.openrouter_api_key:
+        return
+
+    if has_user_key:
+        return
+
+    if not await can_ip_make_more_requests(db, client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail=f"Free trial limit reached ({FREE_TRIAL_REQUEST_LIMIT} requests per IP). Please provide your own OpenRouter API key to continue.",
+        )
+
+    await increment_ip_request_count(db, client_ip)
+
+
 @router.post("/", response_model=ChatMessageResponse)
 async def send_chat_message(
-    request: ChatMessageRequest, db: AsyncSession = Depends(get_db)
+    chat_request: ChatMessageRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Send a chat message and get a response.
@@ -75,10 +119,10 @@ async def send_chat_message(
     - **temperature**: Response temperature
     - **stream**: Enable streaming response (not used in this endpoint)
     """
-    logging.info(f"Chat endpoint called with request: {request}")
+    logging.info(f"Chat endpoint called with request: {chat_request}")
     try:
         # Use default application if application_id is None
-        application_id = request.application_id
+        application_id = chat_request.application_id
         if application_id is None:
             # Get the first application or create a default one
             from backend.modules.applications.crud import (
@@ -124,16 +168,21 @@ async def send_chat_message(
         knowledge_base_ids = await get_application_knowledge_bases(db, application_id)
 
         # Create RAG query
+        client_ip = extract_client_ip(http_request)
+
+        has_user_key = bool(chat_request.api_key)
+        await enforce_free_trial_limit(db, client_ip, has_user_key)
+
         rag_query = RAGQuery(
-            text=request.message,
+            text=chat_request.message,
             application_id=application_id,
             knowledge_base_ids=knowledge_base_ids if knowledge_base_ids else None,
-            search_type=request.search_type,
-            max_context_length=request.max_context_length,
-            temperature=request.temperature,
-            model_name=request.model_name,
-            provider=request.provider,
-            api_key=request.api_key,  # Pass API key for Cloud Run
+            search_type=chat_request.search_type,
+            max_context_length=chat_request.max_context_length,
+            temperature=chat_request.temperature,
+            model_name=chat_request.model_name,
+            provider=chat_request.provider,
+            api_key=chat_request.api_key,  # Pass API key for Cloud Run
         )
 
         # Process query through RAG pipeline
@@ -145,7 +194,7 @@ async def send_chat_message(
         chat_message = await create_chat_message(
             db=db,
             application_id=application_id,
-            user_message=request.message,
+            user_message=chat_request.message,
             bot_message=rag_response.answer,
         )
 
@@ -167,7 +216,9 @@ async def send_chat_message(
 
 @router.post("/message/stream")
 async def send_chat_message_streaming(
-    request: ChatMessageRequest, db: AsyncSession = Depends(get_db)
+    chat_request: ChatMessageRequest,
+    http_request: Request,
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Send a chat message and get a streaming response.
@@ -179,40 +230,44 @@ async def send_chat_message_streaming(
     - **temperature**: Response temperature
     """
     try:
-        # Verify application exists
-        application_data = await get_application_with_config(db, request.application_id)
+        application_id = chat_request.application_id
+        if application_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Application ID is required for streaming",
+            )
+
+        application_data = await get_application_with_config(db, application_id)
         if not application_data:
             raise HTTPException(status_code=404, detail="Application not found")
 
-        # Get knowledge base IDs for the application
-        knowledge_base_ids = await get_application_knowledge_bases(
-            db, request.application_id
-        )
+        knowledge_base_ids = await get_application_knowledge_bases(db, application_id)
 
-        # Create RAG query
+        client_ip = extract_client_ip(http_request)
+        has_user_key = bool(chat_request.api_key)
+        await enforce_free_trial_limit(db, client_ip, has_user_key)
+
         rag_query = RAGQuery(
-            text=request.message,
-            application_id=request.application_id,
+            text=chat_request.message,
+            application_id=application_id,
             knowledge_base_ids=knowledge_base_ids if knowledge_base_ids else None,
-            search_type=request.search_type,
-            max_context_length=request.max_context_length,
-            temperature=request.temperature,
-            model_name=request.model_name,
-            provider=request.provider,
-            api_key=request.api_key,  # Pass API key for Cloud Run
+            search_type=chat_request.search_type,
+            max_context_length=chat_request.max_context_length,
+            temperature=chat_request.temperature,
+            model_name=chat_request.model_name,
+            provider=chat_request.provider,
+            api_key=chat_request.api_key,  # Pass API key for Cloud Run
         )
 
-        # Store the user message first
         await create_chat_message(
             db=db,
-            application_id=request.application_id,
-            user_message=request.message,
-            bot_message=None,  # Will be updated after streaming
+            application_id=application_id,
+            user_message=chat_request.message,
+            bot_message=None,
         )
 
-        # Return streaming response
         return StreamingResponse(
-            stream_chat_response(rag_query, request.application_id, db),
+            stream_chat_response(rag_query, application_id, db),
             media_type="text/plain",
         )
 
