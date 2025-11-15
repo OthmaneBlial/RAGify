@@ -74,6 +74,20 @@
                 <p class="text-gray-600 text-lg">Create specialized AI assistants and orchestrate the knowledge that powers them</p>
             </div>
 
+            <div id="freeTrialUsageBanner" class="rounded-3xl border border-blue-100 bg-gradient-to-r from-emerald-50 via-white to-sky-50 p-5 mt-6">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                        <p id="freeTrialUsageText" class="text-sm text-gray-600">Checking free-trial usage...</p>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Free trial allows 20 requests per IP; <a href="/settings.html#cloudRunApiKeySection" class="text-blue-600 font-medium hover:underline">add your OpenRouter key in Settings</a> once the limit is reached.
+                        </p>
+                    </div>
+                    <div id="requestsLeftLabel" class="text-sm font-semibold text-emerald-600">
+                        20 requests left
+                    </div>
+                </div>
+            </div>
+
             <!-- Upload Section -->
             <div class="space-y-6">
                 <div class="flex flex-wrap md:flex-row md:items-center md:justify-between gap-4">
@@ -244,9 +258,7 @@
             return `${protocol}//${hostname}:${targetPort}`;
         }
 
-        const IS_CLOUD_RUN = isCloudRunEnvironment();
         const API_BASE = resolveApiBase();
-        let openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
 
         async function handleFileSelect(event) {
             const files = event.target.files;
@@ -268,9 +280,10 @@
 
             try {
                 // Upload to the specific application's documents
-                // Add API key to form data for Cloud Run deployments
-                if (IS_CLOUD_RUN && openRouterApiKey) {
-                    formData.append('api_key', openRouterApiKey);
+                // Add API key from settings if the user provided one
+                const savedOpenRouterKey = localStorage.getItem('openrouter_api_key') || '';
+                if (savedOpenRouterKey) {
+                    formData.append('api_key', savedOpenRouterKey);
                 }
 
                 const response = await fetch(`${API_BASE}/api/v1/applications/${targetAppId}/documents/`, {
@@ -718,134 +731,57 @@
             uploadBtn.disabled = !targetAppId;
         }
 
-        const CLOUD_RUN_KEY_MODAL_ID = 'cloudRunKeyModal';
-        const CLOUD_RUN_KEY_INPUT_ID = 'cloudRunKeyInput';
-        const CLOUD_RUN_KEY_ERROR_ID = 'cloudRunKeyError';
-        let cloudRunKeyResolver = null;
-
-        function configureCloudRunApiKey(key) {
-            openRouterApiKey = key;
-            localStorage.setItem('openrouter_api_key', key);
-            resolveCloudRunKeyPromise();
-            hideCloudRunModal();
-        }
-
-        function resolveCloudRunKeyPromise() {
-            if (typeof cloudRunKeyResolver === 'function') {
-                cloudRunKeyResolver();
-                cloudRunKeyResolver = null;
-            }
-        }
-
-        function waitForCloudRunApiKey() {
-            if (!IS_CLOUD_RUN) {
-                return Promise.resolve();
-            }
-
-            openRouterApiKey = localStorage.getItem('openrouter_api_key') || '';
-            if (openRouterApiKey) {
-                return Promise.resolve();
-            }
-
-            showCloudRunModal();
-            return new Promise((resolve) => {
-                cloudRunKeyResolver = resolve;
-            });
-        }
-
-        function showCloudRunModal() {
-            const modal = createCloudRunModal();
-            if (!modal) return;
-            const panel = modal.querySelector('.cloud-run-modal-panel');
-            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
-            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
-            if (input) {
-                input.value = openRouterApiKey || '';
-                input.focus();
-            }
-            if (error) {
-                error.classList.add('hidden');
-            }
-            document.body.classList.add('overflow-hidden');
-            modal.classList.remove('hidden');
-            requestAnimationFrame(() => {
-                panel?.classList.remove('scale-95', 'opacity-0');
-            });
-        }
-
-        function hideCloudRunModal() {
-            const modal = document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
-            if (!modal) {
+        async function loadFreeTrialUsage() {
+            const banner = document.getElementById('freeTrialUsageBanner');
+            const messageEl = document.getElementById('freeTrialUsageText');
+            const countEl = document.getElementById('requestsLeftLabel');
+            if (!banner || !messageEl || !countEl) {
                 return;
             }
-            const panel = modal.querySelector('.cloud-run-modal-panel');
-            if (panel) {
-                panel.classList.add('scale-95', 'opacity-0');
-            }
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                document.body.classList.remove('overflow-hidden');
-            }, 200);
-        }
 
-        function handleCloudRunKeySave() {
-            const input = document.getElementById(CLOUD_RUN_KEY_INPUT_ID);
-            const error = document.getElementById(CLOUD_RUN_KEY_ERROR_ID);
-            if (!input || !error) {
-                return;
-            }
-            const key = input.value.trim();
-            if (!key) {
-                error.textContent = 'Please enter your OpenRouter API key';
-                error.classList.remove('hidden');
-                return;
-            }
-            error.classList.add('hidden');
-            configureCloudRunApiKey(key);
-        }
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/usage/free-trial`);
+                if (!response.ok) {
+                    throw new Error('Failed to fetch free trial usage');
+                }
+                const data = await response.json();
+                const limit = typeof data.limit === 'number' ? data.limit : 20;
+                const used =
+                    typeof data.used === 'number'
+                        ? data.used
+                        : Math.max(limit - (data.remaining ?? limit), 0);
+                const remaining = Math.max(
+                    typeof data.remaining === 'number' ? data.remaining : limit - used,
+                    0
+                );
 
-        function createCloudRunModal() {
-            if (document.getElementById(CLOUD_RUN_KEY_MODAL_ID)) {
-                return document.getElementById(CLOUD_RUN_KEY_MODAL_ID);
+                if (remaining <= 0) {
+                    countEl.textContent = '0 requests left';
+                    countEl.classList.remove('text-emerald-600', 'text-gray-500');
+                    countEl.classList.add('text-rose-600');
+                    messageEl.textContent =
+                        'Free trial limit reached. Add an OpenRouter API key in Settings to continue.';
+                } else {
+                    const plural = remaining === 1 ? '' : 's';
+                    messageEl.textContent = `You have used ${used} of ${limit} free requests.`;
+                    countEl.textContent = `${remaining} request${plural} left`;
+                    countEl.classList.remove('text-rose-600', 'text-gray-500');
+                    countEl.classList.add('text-emerald-600');
+                }
+            } catch (error) {
+                console.error('Failed to load free trial usage:', error);
+                messageEl.textContent = 'Unable to load request usage right now.';
+                countEl.textContent = 'Check again soon';
+                countEl.classList.remove('text-emerald-600', 'text-rose-600');
+                countEl.classList.add('text-gray-500');
             }
-
-            const modal = document.createElement('div');
-            modal.id = CLOUD_RUN_KEY_MODAL_ID;
-            modal.className = 'fixed inset-0 z-[60] hidden items-center justify-center bg-black/60 px-4 py-6';
-            modal.innerHTML = `
-                <div class="cloud-run-modal-panel max-w-lg w-full bg-white rounded-3xl p-6 shadow-2xl transform scale-95 opacity-0 transition-all duration-200 space-y-4">
-                    <h3 class="text-xl font-semibold text-gray-900">OpenRouter API Key Required</h3>
-                    <p class="text-sm text-gray-600">This Cloud Run deployment needs your OpenRouter API key so the AI backend can respond to your requests. The key is stored only in your browser.</p>
-                    <input id="${CLOUD_RUN_KEY_INPUT_ID}" type="password" autocomplete="off" placeholder="sk-openrouter-..." class="w-full border border-blue-100 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 transition" />
-                    <p id="${CLOUD_RUN_KEY_ERROR_ID}" class="text-xs text-rose-500 hidden">Please enter your OpenRouter API key</p>
-                    <div class="flex flex-col gap-3">
-                        <button id="cloudRunKeySaveBtn" class="w-full bg-blue-600 text-white px-4 py-3 rounded-xl font-semibold hover:bg-blue-700 transition">Save API Key</button>
-                        <button id="cloudRunKeySettingsBtn" class="w-full text-sm text-blue-600 hover:underline">Go to Settings to manage API keys</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            modal.querySelector('#cloudRunKeySaveBtn')?.addEventListener('click', handleCloudRunKeySave);
-            modal.querySelector('#cloudRunKeySettingsBtn')?.addEventListener('click', () => {
-                window.location.href = '/settings.html';
-            });
-            const input = modal.querySelector(`#${CLOUD_RUN_KEY_INPUT_ID}`);
-            if (input) {
-                input.addEventListener('keydown', (event) => {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        handleCloudRunKeySave();
-                    }
-                });
-            }
-            return modal;
         }
 
         // Load data on page load
         window.onload = async function() {
-            await waitForCloudRunApiKey();
             loadApplications();
             loadDocuments();
+            loadFreeTrialUsage();
 
             // Add event listener for upload target selector
             document.getElementById('uploadTargetSelect').addEventListener('change', updateUploadButtonState);

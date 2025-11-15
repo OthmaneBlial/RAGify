@@ -3,6 +3,7 @@ from .endpoints.knowledge import router as knowledge_router
 from .endpoints.applications import router as applications_router
 from .endpoints.chat import router as chat_router
 from .endpoints.models import router as models_router
+from .endpoints.usage import router as usage_router
 
 print("Loading API v1 router")
 api_router = APIRouter()
@@ -18,4 +19,8 @@ print("Including chat router")
 api_router.include_router(chat_router, prefix="/api/v1/chat", tags=["chat"])
 print("Including models router")
 api_router.include_router(models_router, prefix="/api/v1/models", tags=["models"])
+print("Including usage router")
+api_router.include_router(
+    usage_router, prefix="/api/v1/usage", tags=["usage"]
+)
 print("API v1 router loaded")
