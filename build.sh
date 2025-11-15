@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Usage:
+
+# Normal fast flow (no base rebuild):
+# ./build.sh
+
+# When you change Python/system deps and want to rebuild the heavy base image once:
+# BUILD_BASE_IMAGE=1 ./build.sh
+
 # --- Paths / globals ---
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMP_ENV_FILE=""
