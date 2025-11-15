@@ -1,6 +1,6 @@
 # RAGify
 
-Retrieval-Augmented Generation that actually works. RAGify is a modern chat experience that answers questions from your documents, cites its sources, and admits when it does not know. Try it live: **https://ragify-sqhu4om4aq-uc.a.run.app/**
+Retrieval-Augmented Generation that actually works. RAGify is a modern chat experience that answers questions from your documents, cites its sources, and admits when it does not know. Try it live: **https://ragify-sqhu4om4aq-ew.a.run.app/**
 
 ## 🔥 Highlights
 
@@ -15,7 +15,7 @@ Retrieval-Augmented Generation that actually works. RAGify is a modern chat expe
 
 The public Cloud Run deployment runs the same configuration described below. Feel free to explore it, upload a PDF, and ask questions:
 
-- Chat + Knowledge Base UI: `https://ragify-sqhu4om4aq-uc.a.run.app/`
+- Chat + Knowledge Base UI: `https://ragify-sqhu4om4aq-ew.a.run.app/`
 
 > Uploads made to the demo instance are purged periodically. Bring your own OpenRouter key for local/private deployments.
 
@@ -34,7 +34,7 @@ SQLite is now the recommended default for local development **and** Cloud Run. P
 ## 🚀 Quick Start (SQLite, zero external deps)
 
 ```bash
-git clone https://github.com/<you>/RAGify.git
+git clone https://github.com/OthmaneBlial/RAGify.git
 cd RAGify
 cp .env.example .env         # add your OPENROUTER_API_KEY
 python -m venv venv && source venv/bin/activate
